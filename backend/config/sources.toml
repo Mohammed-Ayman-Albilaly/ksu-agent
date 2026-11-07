@@ -1,0 +1,19 @@
+# Sources list for KSU Agent ingestion.
+#
+# Every URL the project downloads lives here, never in a script. Adding or
+# replacing a document is an edit to this file.
+#
+#   id       stable identifier used by the manifest and by RAG citations
+#   title    human-readable name, quoted in answers
+#   url      the document to download
+#   filename name the file is saved as under the download directory
+#            (data/raw by default, which git ignores)
+#
+# Downloaded files are recorded in data/raw/manifest.json with their URL,
+# download date and SHA-256.
+
+[[source]]
+id = "ref-01"
+title = "KSU Regulations of Study and Examinations — undergraduate, with executive rules (v2)"
+url = "https://dar.ksu.edu.sa/sites/dar.ksu.edu.sa/files/users/user980/excutive_regulations_2.pdf"
+filename = "ksu_undergraduate_regulations_v2.pdf"

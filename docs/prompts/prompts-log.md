@@ -17,3 +17,9 @@ Create docs/DECISIONS.md: record every decision in the attached Sprint 0 file (I
 D1: scope narrowed from all KSU majors to CCIS undergraduates (time; sources must be verifiable). D2: REF-01 replaced by the current undergraduate regulation with executive rules, version 2, on dar.ksu.edu.sa (the 1436H copy is outdated). D3: repo is public. D4: DevAI Desktop builds the code; VS Code only for reading and review.
 Use only the file and this message; if a field is unknown write "not stated", never guess. Append this prompt to docs/prompts/prompts-log.md under "Prompt 3".
 Do not commit. Show me the file.
+
+## Prompt 4
+
+i need you to create a python script inside /backend that download regulation from: https://dar.ksu.edu.sa/sites/dar.ksu.edu.sa/files/users/user980/excutive_regulations_2.pdf
+and save it in `data/row` which is ignored by git and record with it the following: URL, the download date and file's hash.
+have the script read the URL from a sources list in a file not hard-coded
