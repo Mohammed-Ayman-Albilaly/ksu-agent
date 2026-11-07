@@ -8,6 +8,8 @@
 # Data that must not be tracked
 data/raw/
 data/private/
+# In-progress downloads and lock-file writes
+*.part
 
 # Python
 __pycache__/

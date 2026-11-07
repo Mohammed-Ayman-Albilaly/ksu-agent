@@ -1,0 +1,15 @@
+{
+  "documents": {
+    "ref-01": {
+      "bytes": 3414881,
+      "content_type": "application/pdf",
+      "downloaded_at": "2026-11-07T17:14:25Z",
+      "filename": "ksu_undergraduate_regulations_v2.pdf",
+      "sha256": "cc707af39c36b1f8259f5c25abaa6109afb11eca8be42e9a9327a6be28e62ca4",
+      "source_id": "ref-01",
+      "title": "KSU Regulations of Study and Examinations — undergraduate, with executive rules (v2)",
+      "url": "https://dar.ksu.edu.sa/sites/dar.ksu.edu.sa/files/users/user980/excutive_regulations_2.pdf"
+    }
+  },
+  "version": 1
+}
