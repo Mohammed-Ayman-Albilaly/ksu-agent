@@ -1,0 +1,4 @@
+# Backend runtime and ingestion dependencies.
+# Install with: python -m pip install -r backend/requirements.txt
+
+pymupdf==2.1
