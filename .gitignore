@@ -8,6 +8,7 @@
 # Data that must not be tracked
 data/raw/
 data/private/
+data/processed/
 # In-progress downloads and lock-file writes
 *.part
 
