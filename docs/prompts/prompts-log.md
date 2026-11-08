@@ -44,3 +44,17 @@ Run `python -m pytest backend/tests -q`; if any test fails, stop and report the 
 If all pass, commit everything on the current branch feat/parse-regulation with message "feat: parse and clean source PDFs into data/processed" and push with `git push -u origin feat/parse-regulation`.
 Open a pull request into main titled "feat: parse and clean source PDFs into data/processed"; body: what changed, and the verified numbers (63 pages; counts 15, 3, 3, 3, 2) plus that data/processed is git-ignored.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
+
+## Prompt 8
+
+Create backend/scripts/chunk_source.py: read data/processed/<id>.txt, drop every line containing ".....", and split on heading lines that are exactly "المادة <ordinal>" with at most 4 tokens; parse the Arabic ordinal to an int and attach any following "القاعدة التنفيذية للمادة X" block to that article's chunk. Text after article 73 becomes one chunk with kind "annex".
+Write one JSON object per line to data/processed/chunks/<id>.jsonl: source_id, title, url, sha256 (from sources.toml and sources.lock.json, never hard-coded), kind ("article"/"annex"), article_number, heading, text, char_count.
+Add pytest tests for the ordinal parser (الأولى=1, الحادية عشرة=11, العشرون=20, الثالثة والعشرون=23, الثالثة والسبعون=73) and for TOC lines being dropped. Run it on ref-01 and report chunk count, how many distinct article_number values, min and max char_count, and the char_count of chunk 62.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 9
+
+Run `python -m pytest backend/tests -q`; if anything fails, stop and report without committing.
+If it passes, commit on feat/chunk-regulation with message "feat: chunk parsed sources into per-article JSONL" and push with `git push -u origin feat/chunk-regulation`.
+Open a pull request into main with that title; body: what changed, and the verified numbers (74 chunks, articles 1-73, min/max char_count 65/13546, 52 tests pass), and that data/processed/chunks/ is git-ignored.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
