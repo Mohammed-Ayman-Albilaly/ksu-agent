@@ -84,6 +84,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             <button
               type="button"
               onClick={copy}
+              aria-label={copied ? t.chat.copied : t.chat.copy}
               className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-white hover:text-navy"
             >
               {copied ? (
@@ -91,7 +92,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
               ) : (
                 <CopyIcon className="h-3.5 w-3.5" />
               )}
-              <span aria-live="polite">{copied ? t.chat.copied : t.chat.copy}</span>
+              <span>{copied ? t.chat.copied : t.chat.copy}</span>
             </button>
 
             <Citations citations={message.citations ?? []} />

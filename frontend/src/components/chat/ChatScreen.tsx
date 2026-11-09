@@ -42,6 +42,7 @@ export function ChatScreen() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const userId = user?.id ?? null;
 
@@ -50,6 +51,16 @@ export function ChatScreen() {
       router.replace("/login?next=/chat");
     }
   }, [status, router]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!userId) {
@@ -95,7 +106,7 @@ export function ChatScreen() {
         signal: controller.signal,
       });
 
-      if (requestRef.current !== requestId) {
+      if (!mountedRef.current || requestRef.current !== requestId) {
         return;
       }
 

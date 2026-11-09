@@ -56,6 +56,10 @@ export function Composer({
       return;
     }
 
+    if (window.matchMedia("(pointer: coarse)").matches) {
+      return;
+    }
+
     event.preventDefault();
 
     if (canSend) {
