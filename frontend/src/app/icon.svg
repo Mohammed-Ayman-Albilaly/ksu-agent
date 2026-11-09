@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="KSU Agent">
+  <rect width="32" height="32" rx="8" fill="#0E2A47" />
+  <rect x="6" y="9" width="20" height="12" rx="4" fill="#17A398" />
+  <path d="M11 20h4.5L11 24.6V20Z" fill="#17A398" />
+  <circle cx="12" cy="15" r="1.4" fill="#0E2A47" />
+  <circle cx="16" cy="15" r="1.4" fill="#0E2A47" />
+  <circle cx="20" cy="15" r="1.4" fill="#0E2A47" />
+</svg>
