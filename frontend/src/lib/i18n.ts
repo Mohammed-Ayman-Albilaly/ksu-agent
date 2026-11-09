@@ -100,6 +100,34 @@ export type Dictionary = {
       switchLink: string;
     };
   };
+  chat: {
+    metaTitle: string;
+    title: string;
+    newChat: string;
+    you: string;
+    assistant: string;
+    placeholder: string;
+    send: string;
+    stop: string;
+    retry: string;
+    copy: string;
+    copied: string;
+    sources: string;
+    opensInNewTab: string;
+    noSource: string;
+    searching: string;
+    disclaimer: string;
+    newMessages: string;
+    errors: {
+      unavailable: string;
+      invalid: string;
+    };
+    empty: {
+      greeting: string;
+      note: string;
+      suggestions: [string, string, string, string];
+    };
+  };
   footer: {
     project: string;
     disclaimer: string;
@@ -229,6 +257,40 @@ const ar: Dictionary = {
       submit: "إنشاء حساب",
       switchText: "لديك حساب؟",
       switchLink: "تسجيل الدخول",
+    },
+  },
+  chat: {
+    metaTitle: "المحادثة · KSU Agent",
+    title: "المحادثة",
+    newChat: "محادثة جديدة",
+    you: "أنت",
+    assistant: "المساعد",
+    placeholder: "اكتب سؤالك…",
+    send: "إرسال",
+    stop: "إيقاف",
+    retry: "إعادة المحاولة",
+    copy: "نسخ الإجابة",
+    copied: "تم النسخ",
+    sources: "المصادر",
+    opensInNewTab: "يفتح في تبويب جديد",
+    noSource:
+      "لم يُعثر على مصدر رسمي لهذه الإجابة. للتأكد، راجع عمادة القبول والتسجيل.",
+    searching: "جارٍ البحث في المصادر…",
+    disclaimer: "قد يخطئ المساعد. تحقق دائمًا من المصدر.",
+    newMessages: "رسائل جديدة",
+    errors: {
+      unavailable: "تعذر الاتصال بالخادم، حاول مرة أخرى.",
+      invalid: "تعذر معالجة هذه الرسالة. جرّب صياغتها بشكل مختلف.",
+    },
+    empty: {
+      greeting: "مرحبًا {name}، كيف أقدر أساعدك؟",
+      note: "الإجابات مبنية على لائحة الدراسة والاختبارات الرسمية لجامعة الملك سعود.",
+      suggestions: [
+        "متى يُحرم الطالب من دخول الاختبار النهائي؟",
+        "ما هو الإنذار الأكاديمي ومتى يُفصل الطالب؟",
+        "كيف أعتذر عن مقرر أو عن فصل دراسي؟",
+        "كيف يُحسب المعدل التراكمي؟",
+      ],
     },
   },
   footer: {
@@ -361,6 +423,40 @@ const en: Dictionary = {
       submit: "Create account",
       switchText: "Already have an account?",
       switchLink: "Log in",
+    },
+  },
+  chat: {
+    metaTitle: "Chat · KSU Agent",
+    title: "Chat",
+    newChat: "New chat",
+    you: "You",
+    assistant: "Assistant",
+    placeholder: "Type your question…",
+    send: "Send",
+    stop: "Stop",
+    retry: "Retry",
+    copy: "Copy answer",
+    copied: "Copied",
+    sources: "Sources",
+    opensInNewTab: "opens in a new tab",
+    noSource:
+      "No official source was found for this answer. Please confirm with the Deanship of Admission and Registration.",
+    searching: "Searching the official sources…",
+    disclaimer: "The assistant can make mistakes. Always check the source.",
+    newMessages: "New messages",
+    errors: {
+      unavailable: "Could not reach the server, please try again.",
+      invalid: "This message could not be processed. Try rewording it.",
+    },
+    empty: {
+      greeting: "Hi {name}, how can I help?",
+      note: "Answers come from the official KSU Study and Examination Regulations.",
+      suggestions: [
+        "When is a student barred from the final exam?",
+        "What is an academic warning, and when is a student dismissed?",
+        "How do I withdraw from a course or a semester?",
+        "How is the cumulative GPA calculated?",
+      ],
     },
   },
   footer: {

@@ -19,6 +19,7 @@ import {
   type LoginInput,
   type RegisterInput,
 } from "@/lib/api/auth";
+import { clearChatSessions } from "@/lib/chatStorage";
 
 export type AuthStatus = "loading" | "authenticated" | "guest";
 
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await logoutRequest();
+    clearChatSessions();
     setUser(null);
     setStatus("guest");
   }, []);

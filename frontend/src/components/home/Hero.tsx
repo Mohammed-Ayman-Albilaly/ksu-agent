@@ -86,7 +86,6 @@ export function Hero() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
               href="/chat"
-              prefetch={false}
               className="inline-flex w-full items-center justify-center rounded-xl bg-teal-deep px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-teal-dark sm:w-auto"
             >
               {t.hero.primary}

@@ -76,7 +76,7 @@ export function SiteHeader() {
         </Link>
 
         <nav aria-label={t.nav.label} className="hidden items-center gap-1 md:flex">
-          <Link href="/chat" prefetch={false} className={desktopLinkClass}>
+          <Link href="/chat" className={desktopLinkClass}>
             {t.nav.chat}
           </Link>
 
@@ -144,7 +144,6 @@ export function SiteHeader() {
           >
             <Link
               href="/chat"
-              prefetch={false}
               className={mobileLinkClass}
               onClick={closeMenu}
             >
