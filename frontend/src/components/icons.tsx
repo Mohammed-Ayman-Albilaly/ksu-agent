@@ -156,3 +156,35 @@ export function InfoIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function EyeIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+      {...strokeProps}
+    >
+      <path d="M2.6 12S6.2 5.9 12 5.9 21.4 12 21.4 12 17.8 18.1 12 18.1 2.6 12 2.6 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+      {...strokeProps}
+    >
+      <path d="m3.5 3.5 17 17" />
+      <path d="M10.2 6.2A9.4 9.4 0 0 1 12 6c5.8 0 9.4 6 9.4 6a17.6 17.6 0 0 1-3.1 3.7" />
+      <path d="M6.3 7.9A17.2 17.2 0 0 0 2.6 12S6.2 18 12 18a9.6 9.6 0 0 0 3.5-.7" />
+      <path d="M9.9 10a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}

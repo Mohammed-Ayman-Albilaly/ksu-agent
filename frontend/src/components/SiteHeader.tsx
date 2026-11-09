@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import { BrandMark, CloseIcon, LanguagesIcon, MenuIcon } from "@/components/icons";
 
@@ -13,7 +15,10 @@ const mobileLinkClass =
 
 export function SiteHeader() {
   const { lang, setLang, t } = useLanguage();
+  const { user, status, logout } = useAuth();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -35,6 +40,19 @@ export function SiteHeader() {
   const toggleLanguage = () => setLang(lang === "ar" ? "en" : "ar");
   const closeMenu = () => setOpen(false);
   const toggleTextLang = lang === "ar" ? "en" : "ar";
+  const firstName = user ? user.full_name.trim().split(/\s+/)[0] : "";
+
+  const handleLogout = async () => {
+    if (loggingOut) {
+      return;
+    }
+
+    setLoggingOut(true);
+    closeMenu();
+    await logout();
+    setLoggingOut(false);
+    router.push("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 shadow-[0_1px_3px_rgba(14,42,71,0.06)] backdrop-blur">
@@ -61,16 +79,35 @@ export function SiteHeader() {
           <Link href="/chat" prefetch={false} className={desktopLinkClass}>
             {t.nav.chat}
           </Link>
-          <Link href="/login" prefetch={false} className={desktopLinkClass}>
-            {t.nav.login}
-          </Link>
-          <Link
-            href="/register"
-            prefetch={false}
-            className="ms-2 rounded-xl bg-teal-deep px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
-          >
-            {t.nav.register}
-          </Link>
+
+          {status === "loading" ? null : status === "authenticated" ? (
+            <>
+              <span className="max-w-40 truncate px-3 text-sm font-medium text-ink/80">
+                {t.auth.greeting} {firstName}
+              </span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="ms-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-60"
+              >
+                {t.auth.logout}
+              </button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className={desktopLinkClass}>
+                {t.nav.login}
+              </Link>
+              <Link
+                href="/register"
+                className="ms-2 rounded-xl bg-teal-deep px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
+              >
+                {t.nav.register}
+              </Link>
+            </>
+          )}
+
           <button
             type="button"
             onClick={toggleLanguage}
@@ -113,22 +150,40 @@ export function SiteHeader() {
             >
               {t.nav.chat}
             </Link>
-            <Link
-              href="/login"
-              prefetch={false}
-              className={mobileLinkClass}
-              onClick={closeMenu}
-            >
-              {t.nav.login}
-            </Link>
-            <Link
-              href="/register"
-              prefetch={false}
-              onClick={closeMenu}
-              className="mt-2 rounded-xl bg-teal-deep px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
-            >
-              {t.nav.register}
-            </Link>
+
+            {status === "loading" ? null : status === "authenticated" ? (
+              <>
+                <span className="truncate px-3 py-2.5 text-sm font-medium text-navy">
+                  {t.auth.greeting} {firstName}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className={`${mobileLinkClass} text-start disabled:opacity-60`}
+                >
+                  {t.auth.logout}
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className={mobileLinkClass}
+                  onClick={closeMenu}
+                >
+                  {t.nav.login}
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={closeMenu}
+                  className="mt-2 rounded-xl bg-teal-deep px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-teal-dark"
+                >
+                  {t.nav.register}
+                </Link>
+              </>
+            )}
+
             <button
               type="button"
               onClick={toggleLanguage}

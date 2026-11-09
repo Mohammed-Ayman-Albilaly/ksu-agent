@@ -51,6 +51,55 @@ export type Dictionary = {
     };
   };
   note: string;
+  auth: {
+    greeting: string;
+    logout: string;
+    pending: string;
+    fields: {
+      name: string;
+      email: string;
+      emailHint: string;
+      password: string;
+      confirm: string;
+      agree: string;
+      showPassword: string;
+      hidePassword: string;
+    };
+    errors: {
+      nameRequired: string;
+      nameLength: string;
+      emailRequired: string;
+      emailDomain: string;
+      passwordRequired: string;
+      passwordLength: string;
+      passwordWeak: string;
+      confirmRequired: string;
+      confirmMismatch: string;
+      agreeRequired: string;
+    };
+    server: {
+      emailTaken: string;
+      invalidCredentials: string;
+      serverUnavailable: string;
+      validation: string;
+    };
+    login: {
+      metaTitle: string;
+      title: string;
+      subtitle: string;
+      submit: string;
+      switchText: string;
+      switchLink: string;
+    };
+    register: {
+      metaTitle: string;
+      title: string;
+      subtitle: string;
+      submit: string;
+      switchText: string;
+      switchLink: string;
+    };
+  };
   footer: {
     project: string;
     disclaimer: string;
@@ -133,6 +182,55 @@ const ar: Dictionary = {
     },
   },
   note: "الإجابات مبنية على المستندات الرسمية لجامعة الملك سعود. للقرارات الرسمية، تأكد دائمًا من عمادة القبول والتسجيل.",
+  auth: {
+    greeting: "مرحبًا،",
+    logout: "تسجيل الخروج",
+    pending: "جارٍ…",
+    fields: {
+      name: "الاسم الكامل",
+      email: "البريد الجامعي",
+      emailHint: "استخدم بريدك الجامعي",
+      password: "كلمة المرور",
+      confirm: "تأكيد كلمة المرور",
+      agree: "أوافق على استخدام بياناتي لتشغيل الخدمة فقط",
+      showPassword: "إظهار كلمة المرور",
+      hidePassword: "إخفاء كلمة المرور",
+    },
+    errors: {
+      nameRequired: "أدخل اسمك الكامل",
+      nameLength: "يجب أن يكون الاسم بين حرفين و60 حرفًا",
+      emailRequired: "أدخل بريدك الجامعي",
+      emailDomain: "يجب أن ينتهي البريد بـ @student.ksu.edu.sa",
+      passwordRequired: "أدخل كلمة المرور",
+      passwordLength: "كلمة المرور يجب ألا تقل عن 8 أحرف",
+      passwordWeak: "أضف حرفًا ورقمًا على الأقل إلى كلمة المرور",
+      confirmRequired: "أعد إدخال كلمة المرور",
+      confirmMismatch: "كلمتا المرور غير متطابقتين",
+      agreeRequired: "يجب الموافقة على استخدام البيانات",
+    },
+    server: {
+      emailTaken: "هذا البريد مسجل مسبقًا",
+      invalidCredentials: "البريد أو كلمة المرور غير صحيحة",
+      serverUnavailable: "تعذر الاتصال بالخادم، حاول لاحقًا",
+      validation: "تحقق من الحقول أدناه",
+    },
+    login: {
+      metaTitle: "تسجيل الدخول · KSU Agent",
+      title: "تسجيل الدخول",
+      subtitle: "أدخل بريدك الجامعي وكلمة المرور للمتابعة.",
+      submit: "تسجيل الدخول",
+      switchText: "ليس لديك حساب؟",
+      switchLink: "إنشاء حساب",
+    },
+    register: {
+      metaTitle: "إنشاء حساب · KSU Agent",
+      title: "إنشاء حساب",
+      subtitle: "أنشئ حسابك لتبدأ استخدام المساعد.",
+      submit: "إنشاء حساب",
+      switchText: "لديك حساب؟",
+      switchLink: "تسجيل الدخول",
+    },
+  },
   footer: {
     project: "KSU Agent · جامعة الملك سعود",
     disclaimer: "مشروع طلابي، وليس خدمة رسمية من جامعة الملك سعود.",
@@ -216,6 +314,55 @@ const en: Dictionary = {
   },
  
   note: "Answers are based on official King Saud University documents. For official decisions, always confirm with the Deanship of Admission and Registration.",
+  auth: {
+    greeting: "Hi,",
+    logout: "Log out",
+    pending: "Please wait…",
+    fields: {
+      name: "Full name",
+      email: "University email",
+      emailHint: "Use your university email",
+      password: "Password",
+      confirm: "Confirm password",
+      agree: "I agree that my data is used only to run the service",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
+    },
+    errors: {
+      nameRequired: "Enter your full name",
+      nameLength: "Name must be between 2 and 60 characters",
+      emailRequired: "Enter your university email",
+      emailDomain: "Email must end with @student.ksu.edu.sa",
+      passwordRequired: "Enter your password",
+      passwordLength: "Password must be at least 8 characters",
+      passwordWeak: "Add at least one letter and one number",
+      confirmRequired: "Re-enter your password",
+      confirmMismatch: "Passwords do not match",
+      agreeRequired: "You must agree to the data use",
+    },
+    server: {
+      emailTaken: "This email is already registered",
+      invalidCredentials: "Email or password is incorrect",
+      serverUnavailable: "Could not reach the server, try again later",
+      validation: "Check the fields below",
+    },
+    login: {
+      metaTitle: "Log in · KSU Agent",
+      title: "Log in",
+      subtitle: "Enter your university email and password to continue.",
+      submit: "Log in",
+      switchText: "Don't have an account?",
+      switchLink: "Create account",
+    },
+    register: {
+      metaTitle: "Create account · KSU Agent",
+      title: "Create account",
+      subtitle: "Create your account to start using the assistant.",
+      submit: "Create account",
+      switchText: "Already have an account?",
+      switchLink: "Log in",
+    },
+  },
   footer: {
     project: "KSU Agent · King Saud University",
     disclaimer: "Student project — not an official KSU service.",

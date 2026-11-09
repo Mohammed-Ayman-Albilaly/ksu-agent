@@ -93,7 +93,6 @@ export function Hero() {
             </Link>
             <Link
               href="/register"
-              prefetch={false}
               className="inline-flex w-full items-center justify-center rounded-xl border border-white/25 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:border-white/40 hover:bg-white/10 sm:w-auto"
             >
               {t.hero.secondary}
