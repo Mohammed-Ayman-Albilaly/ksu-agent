@@ -174,6 +174,8 @@ def test_build_records_carries_source_provenance():
         "kind",
         "article_number",
         "heading",
+        "part",
+        "parts",
         "text",
         "char_count",
     ]
@@ -249,3 +251,104 @@ def test_main_rejects_unknown_source_id(tmp_path):
     )
 
     assert exit_code == 2
+
+
+def words(text):
+    """One token per whitespace-separated word, so limits are easy to reason about."""
+    return text.split()
+
+
+def _long_article_lines(article_lines=12):
+    lines = [" المادة الأولى", " نص الأولى.", " المادة الثانية"]
+    lines += [f" سطر {index} من نص المادة الثانية" for index in range(article_lines)]
+    return lines
+
+
+def test_chunks_that_fit_are_not_split():
+    chunks = chunk_source.split_chunks(DOCUMENT)
+
+    parts = chunk_source.split_oversized(chunks, max_tokens=1000, encode=words)
+
+    assert [(part.part, part.parts) for part in parts] == [(1, 1), (1, 1)]
+    assert [part.text for part in parts] == [chunk.text for chunk in chunks]
+
+
+def test_oversized_chunk_is_split_with_heading_repeated():
+    chunks = chunk_source.split_chunks(_long_article_lines())
+
+    parts = chunk_source.split_oversized(chunks, max_tokens=12, encode=words)
+
+    article_two = [part for part in parts if part.article_number == 2]
+    assert len(article_two) > 1
+    assert [part.part for part in article_two] == list(
+        range(1, len(article_two) + 1)
+    )
+    assert {part.parts for part in article_two} == {len(article_two)}
+    assert all(part.text.startswith("المادة الثانية") for part in article_two)
+    assert all(len(words(part.text)) <= 12 for part in article_two)
+    # Every line of the article survives in exactly one part.
+    body = " ".join(part.text for part in article_two)
+    assert all(f"سطر {index}" in body for index in range(12))
+    # The article that fits is left alone.
+    assert [part for part in parts if part.article_number == 1][0].parts == 1
+
+
+def test_part_that_cannot_be_split_stays_over_the_limit():
+    chunk = chunk_source.Chunk(
+        kind="article",
+        article_number=1,
+        heading="المادة الأولى",
+        text="المادة الأولى\n" + "ا" * 50,
+    )
+
+    parts = chunk_source.split_oversized([chunk], max_tokens=20, encode=list)
+
+    assert len(parts) == 1
+    assert parts[0].parts == 1
+    assert len(list(parts[0].text)) > 20
+
+
+def test_chunk_source_splits_oversized_chunks_in_the_jsonl(tmp_path):
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    (processed / "ref-01.txt").write_text(
+        "\n".join(_long_article_lines()) + "\n", encoding="utf-8"
+    )
+    source = Source(id="ref-01", url="https://example.test/a.pdf", filename="a.pdf")
+
+    records = chunk_source.chunk_source(
+        source,
+        "a" * 64,
+        processed_dir=processed,
+        out_dir=tmp_path / "chunks",
+        max_tokens=8,
+        encode=words,
+    )
+
+    article_two = [record for record in records if record["article_number"] == 2]
+    assert len(article_two) > 1
+    assert [record["part"] for record in article_two] == list(
+        range(1, len(article_two) + 1)
+    )
+    assert {record["parts"] for record in article_two} == {len(article_two)}
+    assert all(
+        record["text"].startswith("المادة الثانية") for record in article_two
+    )
+
+
+def test_split_requires_both_limit_and_tokenizer(tmp_path):
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    (processed / "ref-01.txt").write_text(
+        "\n".join(DOCUMENT) + "\n", encoding="utf-8"
+    )
+    source = Source(id="ref-01", url="https://example.test/a.pdf", filename="a.pdf")
+
+    with pytest.raises(ValueError, match="must be given together"):
+        chunk_source.chunk_source(
+            source,
+            "a" * 64,
+            processed_dir=processed,
+            out_dir=tmp_path / "chunks",
+            max_tokens=10,
+        )

@@ -1,6 +1,8 @@
 # Secrets / environment
 .env
 .env.*
+# The template holds no secrets, so it is tracked.
+!.env.example
 
 # Archives
 *.zip

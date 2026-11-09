@@ -1,4 +1,8 @@
 # Backend runtime and ingestion dependencies.
 # Install with: python -m pip install -r backend/requirements.txt
 
+numpy==2.4.4
+# Hosted embedding API, see backend/config/embeddings.toml
+openai==2.54.0
 pymupdf==2.1
+tiktoken==0.13.0

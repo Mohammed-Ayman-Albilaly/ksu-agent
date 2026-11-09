@@ -58,3 +58,16 @@ Run `python -m pytest backend/tests -q`; if anything fails, stop and report with
 If it passes, commit on feat/chunk-regulation with message "feat: chunk parsed sources into per-article JSONL" and push with `git push -u origin feat/chunk-regulation`.
 Open a pull request into main with that title; body: what changed, and the verified numbers (74 chunks, articles 1-73, min/max char_count 65/13546, 52 tests pass), and that data/processed/chunks/ is git-ignored.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
+
+## Prompt 10
+
+Create backend/config/embeddings.toml (provider, model "text-embedding-3-small", dimensions 1536, price per 1M tokens) and backend/scripts/embed_chunks.py: read data/processed/chunks/<id>.jsonl, count tokens per chunk with tiktoken, and abort listing the article numbers if any chunk exceeds the model's 8191-token limit instead of truncating. Add openai and tiktoken to backend/requirements.txt; the key comes only from OPENAI_API_KEY in .env (git-ignored), never printed or committed, and add .env.example with the variable name.
+Embed in batches and write data/processed/index/<id>.npz (float32 vectors) plus <id>.index.json with model, dimensions, vector count, chunk-file sha256, total tokens and estimated cost from the configured price.
+Add pytest tests with a fake client (no network): vector count equals chunk count, dimensions match config, a re-run gives identical vectors. Run it on ref-01 and report vector count, dimensions, total tokens, estimated cost, and the token count of the largest chunk.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 11
+
+Option 1, with two changes: split only the chunks that exceed the model limit, and repeat the article heading at the start of every part so each part stands alone. Add "part" and "parts" fields to the JSONL and keep the same article_number for all parts of an article; still abort if any part stays over 8,191 tokens.
+Re-chunk ref-01, then re-run embed_chunks.py and report chunk count, vector count, dimensions, total tokens, estimated cost, and the largest chunk's token count.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.

@@ -16,12 +16,20 @@ Two structural rules apply:
   directly or not. Everything from the annex section heading onwards is emitted
   as a single chunk with kind "annex".
 
+A third rule applies only when a tokenizer is supplied: a chunk longer than the
+embedding model's input limit (max_input_tokens in
+backend/config/embeddings.toml) is split at paragraph, then line, then word
+boundaries. Only the chunks that do not fit are split, every part repeats the
+chunk's heading so it stands alone, and all parts keep the article number. A part
+that cannot be split any further is left over the limit on purpose, so
+embed_chunks.py aborts instead of embedding a truncated article.
+
 Provenance (title, url, sha256) comes from the sources list and the lock file;
 nothing is hard-coded here.
 
 Output, under data/processed/chunks (git-ignored), one JSON object per line:
     <id>.jsonl   source_id, title, url, sha256, kind, article_number, heading,
-                 text, char_count
+                 part, parts, text, char_count
 
 Usage:
     python backend/scripts/chunk_source.py --source-id ref-01
@@ -33,8 +41,9 @@ import argparse
 import json
 import re
 import sys
+import tomllib
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from fetch_sources import (
@@ -48,6 +57,7 @@ from fetch_sources import (
 
 DEFAULT_PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 DEFAULT_CHUNKS_DIR = DEFAULT_PROCESSED_DIR / "chunks"
+DEFAULT_EMBEDDINGS_CONFIG = REPO_ROOT / "backend" / "config" / "embeddings.toml"
 
 KIND_ARTICLE = "article"
 KIND_ANNEX = "annex"
@@ -115,12 +125,18 @@ _PAGE_MARKER_RE = re.compile(r"^\[\[page [0-9]+\]\]$")
 
 @dataclass(frozen=True)
 class Chunk:
-    """One retrievable unit of the source."""
+    """One retrievable unit of the source.
+
+    ``part`` is 1-based and ``parts`` is how many pieces the chunk was split
+    into; both are 1 when the chunk fits the embedding model's input limit.
+    """
 
     kind: str
     article_number: int | None
     heading: str
     text: str
+    part: int = 1
+    parts: int = 1
 
     @property
     def char_count(self) -> int:
@@ -351,6 +367,126 @@ def _rule_block_end(lines: list[str], start: int) -> int:
     return index
 
 
+def load_split_limits(config_path: Path) -> tuple[int, str]:
+    """``(max_input_tokens, tokenizer)`` from the embedding config.
+
+    The limit and the tokenizer belong to the embedding model, so they are read
+    from backend/config/embeddings.toml rather than repeated here.
+    """
+    with Path(config_path).open("rb") as fh:
+        data = tomllib.load(fh)
+
+    section = data.get("embedding")
+    if not isinstance(section, dict):
+        raise ValueError(f"{config_path}: no [embedding] table found")
+
+    max_tokens = section.get("max_input_tokens")
+    tokenizer = section.get("tokenizer")
+    if not max_tokens or not tokenizer:
+        raise ValueError(
+            f"{config_path}: [embedding] needs max_input_tokens and tokenizer"
+        )
+    return int(max_tokens), str(tokenizer)
+
+
+def make_tokenizer(name: str):
+    """The tiktoken encoding called ``name``."""
+    import tiktoken
+
+    try:
+        return tiktoken.get_encoding(name)
+    except Exception as exc:  # unknown name or no cached encoding file
+        raise ValueError(f"cannot load tokenizer {name!r}: {exc}") from exc
+
+
+def split_oversized(
+    chunks: list[Chunk], *, max_tokens: int, encode
+) -> list[Chunk]:
+    """Split only the chunks whose text is longer than ``max_tokens``.
+
+    Every part repeats the chunk's heading, so each one can be embedded and
+    cited on its own, and all parts keep the same article number. Chunks that
+    already fit are returned unchanged with ``part = parts = 1``.
+    """
+    if max_tokens <= 0:
+        raise ValueError("max_tokens must be positive")
+
+    result: list[Chunk] = []
+    for chunk in chunks:
+        pieces = _split_text(chunk.text, chunk.heading, max_tokens, encode)
+        for number, text in enumerate(pieces, start=1):
+            result.append(
+                replace(chunk, text=text, part=number, parts=len(pieces))
+            )
+    return result
+
+
+def _split_text(
+    text: str, heading: str, max_tokens: int, encode
+) -> list[str]:
+    """Pieces of ``text`` that fit ``max_tokens``, heading repeated in each."""
+    if len(encode(text)) <= max_tokens:
+        return [text]
+
+    prefix = f"{heading}\n" if heading else ""
+    budget = max_tokens - len(encode(prefix))
+    if budget <= 0:
+        # The heading alone fills the limit; leave the chunk whole so the
+        # embedding run aborts instead of embedding something misleading.
+        return [text]
+
+    body = _body_without_heading(text, heading)
+    return [prefix + piece for piece in _pieces(body, budget, encode)]
+
+
+def _body_without_heading(text: str, heading: str) -> str:
+    """``text`` without its first line when that line is the heading."""
+    lines = text.splitlines()
+    if heading and lines and lines[0].strip() == heading:
+        return "\n".join(lines[1:]).lstrip("\n")
+    return text
+
+
+def _pieces(text: str, budget: int, encode) -> list[str]:
+    """Split ``text`` into pieces of at most ``budget`` tokens.
+
+    Paragraph boundaries are preferred, then line boundaries, then word
+    boundaries. Text with no boundary left is returned as one oversized piece.
+    """
+    if len(encode(text)) <= budget:
+        return [text]
+
+    for separator in ("\n\n", "\n", " "):
+        units = [unit for unit in text.split(separator) if unit.strip()]
+        if len(units) > 1:
+            return _pack(units, separator, budget, encode)
+
+    return [text]
+
+
+def _pack(
+    units: list[str], separator: str, budget: int, encode
+) -> list[str]:
+    """Greedily join ``units`` into pieces that stay within ``budget``."""
+    pieces: list[str] = []
+    current = ""
+    for unit in units:
+        candidate = f"{current}{separator}{unit}" if current else unit
+        if len(encode(candidate)) <= budget:
+            current = candidate
+            continue
+
+        if current:
+            pieces.append(current)
+            current = ""
+        if len(encode(unit)) > budget:
+            pieces.extend(_pieces(unit, budget, encode))
+        else:
+            current = unit
+
+    if current:
+        pieces.append(current)
+    return pieces
 def build_records(
     source: Source, sha256: str, chunks: list[Chunk]
 ) -> list[dict]:
@@ -364,6 +500,8 @@ def build_records(
             "kind": chunk.kind,
             "article_number": chunk.article_number,
             "heading": chunk.heading,
+            "part": chunk.part,
+            "parts": chunk.parts,
             "text": chunk.text,
             "char_count": chunk.char_count,
         }
@@ -386,8 +524,14 @@ def chunk_source(
     *,
     processed_dir: Path,
     out_dir: Path,
+    max_tokens: int | None = None,
+    encode=None,
 ) -> list[dict]:
-    """Read the parsed text of ``source`` and write its chunks."""
+    """Read the parsed text of ``source`` and write its chunks.
+
+    ``max_tokens`` and ``encode`` come from the embedding config; when both are
+    given, only the chunks longer than ``max_tokens`` are split into parts.
+    """
     processed_dir = Path(processed_dir)
     txt_path = processed_dir / f"{source.id}.txt"
     if not txt_path.exists():
@@ -406,15 +550,20 @@ def chunk_source(
                 f"--source-id {source.id}"
             )
 
-    lines = txt_path.read_text(encoding="utf-8").splitlines()
-    records = build_records(source, expected_sha256, split_chunks(lines))
+    if (max_tokens is None) != (encode is None):
+        raise ValueError("max_tokens and encode must be given together")
+
+    chunks = split_chunks(txt_path.read_text(encoding="utf-8").splitlines())
+    if max_tokens is not None:
+        chunks = split_oversized(chunks, max_tokens=max_tokens, encode=encode)
+
+    records = build_records(source, expected_sha256, chunks)
 
     write_jsonl(Path(out_dir) / f"{source.id}.jsonl", records)
     return records
 
-
 def summarise(records: list[dict]) -> dict:
-    """Counts reported after a run."""
+    """Counts reported after a run; a record is one part of one chunk."""
     article_numbers = sorted(
         {
             record["article_number"]
@@ -424,9 +573,11 @@ def summarise(records: list[dict]) -> dict:
     )
     counts = [record["char_count"] for record in records]
     return {
-        "chunks": len(records),
-        "articles": sum(1 for r in records if r["kind"] == KIND_ARTICLE),
-        "annex": sum(1 for r in records if r["kind"] == KIND_ANNEX),
+        "chunks": sum(1 for r in records if r["part"] == 1),
+        "parts": len(records),
+        "split": sum(1 for r in records if r["part"] == 1 and r["parts"] > 1),
+        "articles": sum(1 for r in records if r["kind"] == KIND_ARTICLE and r["part"] == 1),
+        "annex": sum(1 for r in records if r["kind"] == KIND_ANNEX and r["part"] == 1),
         "distinct_articles": len(article_numbers),
         "min_char_count": min(counts) if counts else 0,
         "max_char_count": max(counts) if counts else 0,
@@ -466,6 +617,13 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_CHUNKS_DIR,
         help=f"chunk output directory (default: {DEFAULT_CHUNKS_DIR})",
     )
+    parser.add_argument(
+        "--embeddings-config",
+        type=Path,
+        default=DEFAULT_EMBEDDINGS_CONFIG,
+        help="embedding config supplying max_input_tokens and the tokenizer "
+        f"(default: {DEFAULT_EMBEDDINGS_CONFIG})",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -499,11 +657,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
+        max_tokens, tokenizer_name = load_split_limits(args.embeddings_config)
+        tokenizer = make_tokenizer(tokenizer_name)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
         records = chunk_source(
             source,
             entry["sha256"],
             processed_dir=args.processed_dir,
             out_dir=args.out_dir,
+            max_tokens=max_tokens,
+            encode=tokenizer.encode,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -513,7 +680,8 @@ def main(argv: list[str] | None = None) -> int:
     out_path = Path(args.out_dir) / f"{source.id}.jsonl"
     print(
         f"chunked {source.id}: {stats['chunks']} chunks "
-        f"({stats['articles']} article, {stats['annex']} annex)"
+        f"({stats['articles']} article, {stats['annex']} annex), "
+        f"{stats['parts']} parts ({stats['split']} split at {max_tokens} tokens)"
     )
     print(
         f"  distinct article_number values: {stats['distinct_articles']}; "
