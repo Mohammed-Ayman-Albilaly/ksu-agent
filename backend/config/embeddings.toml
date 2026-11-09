@@ -1,0 +1,24 @@
+# Embedding configuration for KSU Agent ingestion.
+#
+# The embedding model is pinned here, never in a script: swapping models is a
+# config change followed by a re-embed, and every index records which model
+# produced it. Vectors from two different models are never mixed in one index.
+#
+#   provider              vendor whose API generates the vectors
+#   model                 model id sent with every request
+#   dimensions            vector length; must match the model
+#   max_input_tokens      per-input limit; a longer chunk aborts the run
+#   price_per_1m_tokens   USD per 1,000,000 input tokens, for the cost estimate
+#   tokenizer             tiktoken encoding used to count tokens locally
+#   batch_size            maximum number of chunks per request
+#   batch_max_tokens      maximum tokens per request
+
+[embedding]
+provider = "openai"
+model = "text-embedding-3-small"
+dimensions = 1536
+max_input_tokens = 8191
+price_per_1m_tokens = 0.02
+tokenizer = "cl100k_base"
+batch_size = 64
+batch_max_tokens = 200000
