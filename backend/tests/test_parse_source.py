@@ -48,6 +48,39 @@ def test_clean_text_applies_nfkc():
     assert parse_source.clean_text("\ufb01") == "fi"
 
 
+
+def test_clean_text_reverses_arabic_indic_digit_runs():
+    # The PDF stores numbers visually: 1442 comes out as ٢٤٤١.
+    assert parse_source.clean_text("٢٤٤١") == "1442"
+    # A run of one digit is already in order; the ASCII part is untouched.
+    assert parse_source.clean_text("4,5٠") == "4,50"
+    assert parse_source.clean_text("2,75") == "2,75"
+
+
+def test_clean_text_reverses_each_run_separately():
+    # Each run is reversed on its own; the separator is left in place.
+    assert parse_source.clean_text("٦٣٤١-٢٤٤١") == "1436-1442"
+
+
+def test_clean_text_moves_percent_sign_after_its_number():
+    # "٪٥٧" is the visual order of "٧٥٪" (75%); the sign is kept as ASCII "%"
+    # to the right of the number, because it carries the meaning of the clause.
+    assert parse_source.clean_text("٪٥٧") == "75%"
+    assert parse_source.clean_text("عن٪٥٢") == "عن25%"
+
+
+def test_cleaned_document_has_no_arabic_indic_digits():
+    pages = ["المادة ٢٤٤١", "٪٥٧ من المقرر", "4,5٠"]
+
+    document = parse_source.build_document(
+        [parse_source.clean_text(text) for text in pages]
+    )
+
+    leftovers = [char for char in document if "\u0660" <= char <= "\u0669"]
+    assert leftovers == []
+    assert "\u066a" not in document
+    assert "1442" in document and "75%" in document and "4,50" in document
+
 def test_clean_text_leaves_clean_text_unchanged():
     text = "المادة الرابعة: يشترط الحصول على 2.00 من 5.00\n\n"
     assert parse_source.clean_text(text) == text

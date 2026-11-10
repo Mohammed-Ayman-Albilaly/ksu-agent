@@ -110,3 +110,23 @@ Run `python -m pytest backend/tests -q`; if anything fails, stop and report.
 If it passes, commit on fix/retrieve-normalization with message "feat: normalize queries and measure retrieval hit@k" and push with `git push -u origin fix/retrieve-normalization`.
 Open a pull request into main with that title; body: what changed, the measured numbers (hit@1 0.50, hit@3 0.80, hit@5 0.80), and that q3 and q5 miss because of dialect-vs-legal wording.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
+
+## Prompt 18
+
+Add backend/config/chat.toml (model default gpt-4o-mini, temperature 0, max_output_tokens 700, price_per_1m_input/output) and backend/scripts/answer.py: retrieve top-k, put ONLY those articles in the prompt with their article number, heading and url, and ask for an Arabic answer that cites the article numbers; if the retrieved articles do not support an answer, return exactly the fallback text that says the information is not available in the regulation and refers the student to عمادة القبول والتسجيل, with an empty citations list.
+Add POST /chat in the FastAPI app matching docs/api-contract.md ({message, session_id} -> {answer, citations:[{title, article, url}]}), returning 422 for an empty message or one over 1000 characters, and reading the key from .env only (never logging it).
+Add pytest tests with a fake LLM and fake retriever: an answerable question returns citations, and an unsupported question returns the fallback with no citations. Then run the endpoint against 3 real questions and report the answers and citations.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 19
+
+In backend/scripts/parse_source.py, reverse every maximal run of Arabic-Indic digits (U+0660-U+0669) and then map them to ASCII 0-9, because the PDF extraction reverses them: ٪٥٧ must become 75 and ٢٤٤١ must become 1442. Leave ASCII digit runs such as 2,75 untouched.
+Add tests: '٪٥٧'->'75', '٢٤٤١'->'1442', '4,5٠'->'4,50', and '2,75' unchanged. Then re-run parse, chunk and embed for ref-01 and report: every percentage value found (all must be in 10,15,20,25,30,40,50,60,75) and the number of Arabic-Indic digits left (must be 0).
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 20
+
+Run python -m pytest backend/tests -q; if anything fails, stop and report.
+If it passes, commit on the current branch with message "feat: answer with citations, digit-order fix" and push with git push -u origin HEAD.
+Open a pull request into main; body: what changed, the numbers before and after the digit fix (21 reversed percentages and 57% for attendance, now 75% and zero Arabic-Indic digits), hit@k 0.50/0.80/0.80, and that q3 and q5 still miss.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.

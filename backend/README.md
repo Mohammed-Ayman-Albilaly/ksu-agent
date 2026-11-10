@@ -31,3 +31,27 @@ The PDF is hashed again before parsing; a mismatch with the lock file stops the
 run instead of producing a meta file that lies.
 
 Tests: `python -m pytest backend/tests` (no network needed).
+
+## Answering
+
+```bash
+python backend/scripts/answer.py --source-id ref-01 --question "كم المعدل المطلوب عشان أتخرج؟" --json
+```
+
+Retrieves the top 5 chunks with `retrieve.py` and puts **only** those articles —
+article number, heading, URL and text — in the prompt, asking the model pinned in
+[`config/chat.toml`](config/chat.toml) for an Arabic answer that cites the article
+numbers. When the retrieved articles do not support an answer, the fixed fallback
+text is returned with no citations. The key is `OPENAI_API_KEY` from `.env`.
+
+## HTTP API
+
+```bash
+uvicorn app.main:app --app-dir backend
+```
+
+`POST /chat` per [`../docs/api-contract.md`](../docs/api-contract.md): `{message,
+session_id}` in, `{answer, citations: [{title, article, url}]}` out. A message that is
+empty (or blank) or over 1000 characters is a 422; a model or index failure is a 503,
+so "the service is down" is never reported as "the regulation does not say". `article`
+is `null` for the annex chunk, which has no article number.
