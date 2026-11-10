@@ -43,12 +43,18 @@ SNIPPET_CHARS = 200
 
 @dataclass(frozen=True)
 class Chunk:
-    """One indexed chunk, as read from the JSONL written by chunk_source.py."""
+    """One indexed chunk, as read from the JSONL written by chunk_source.py.
+
+    ``title`` and ``url`` are the source's provenance, copied from the same
+    record, so a caller can cite the chunk without loading the sources list.
+    """
 
     index: int
     article_number: int | None
     heading: str
     text: str
+    title: str = ""
+    url: str = ""
     part: int = 1
     parts: int = 1
 
@@ -121,6 +127,8 @@ def read_chunks(chunks_path: Path) -> list[Chunk]:
                     article_number=record.get("article_number"),
                     heading=str(record.get("heading", "")),
                     text=text,
+                    title=str(record.get("title", "")),
+                    url=str(record.get("url", "")),
                     part=int(record.get("part", 1)),
                     parts=int(record.get("parts", 1)),
                 )
@@ -281,6 +289,36 @@ def retrieve(
         query, config, client, tokenizer=tokenizer
     )
     return rank(cosine_scores(vectors, query_vector), chunks, k)
+
+
+def make_searcher(
+    source_id: str,
+    *,
+    config_path: Path = DEFAULT_CONFIG,
+    chunks_dir: Path = DEFAULT_CHUNKS_DIR,
+    index_dir: Path = DEFAULT_INDEX_DIR,
+    client=None,
+    tokenizer=None,
+):
+    """Load one source's index once and return ``search(query, k)``.
+
+    The index is read on the first call and kept in memory, so a long-running
+    caller (the API) pays the load cost once instead of per question.
+    """
+    config = load_config(config_path)
+    vectors, chunks, _metadata = load_index(
+        source_id, config, chunks_dir=chunks_dir, index_dir=index_dir
+    )
+    client = client or make_client(config)
+    tokenizer = tokenizer or make_tokenizer(config)
+
+    def search(query: str, k: int = DEFAULT_K) -> list[SearchResult]:
+        _normalized, query_vector = embed_query(
+            query, config, client, tokenizer=tokenizer
+        )
+        return rank(cosine_scores(vectors, query_vector), chunks, k)
+
+    return search
 
 
 def main(argv: list[str] | None = None) -> int:

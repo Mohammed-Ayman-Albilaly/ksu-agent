@@ -17,6 +17,8 @@ import retrieve
 
 DIMENSIONS = 64
 MODEL = "text-embedding-3-small"
+TITLE = "KSU Regulations of Study and Examinations"
+URL = "https://dar.ksu.edu.sa/regulations.pdf"
 
 # The sentence from the acceptance check. It is the indexed chunk's text.
 PERFECT_SENTENCE = "الحد الأدنى للمعدل المطلوب للتخرج هو 2,75"
@@ -92,6 +94,8 @@ def write_chunks(path, texts, *, article_numbers=None):
     records = [
         {
             "source_id": "ref-01",
+            "title": TITLE,
+            "url": URL,
             "kind": "article",
             "article_number": (
                 article_numbers[index] if article_numbers else index + 1
@@ -270,6 +274,31 @@ def test_annex_chunks_have_no_article_number(tmp_path):
 
     assert results[0].article_number is None
 
+
+
+def test_chunks_carry_the_source_title_and_url_for_citations(tmp_path):
+    write_index(tmp_path, ["one two"])
+
+    chunks = retrieve.read_chunks(tmp_path / "chunks" / "ref-01.jsonl")
+
+    assert chunks[0].title == TITLE
+    assert chunks[0].url == URL
+
+
+def test_make_searcher_searches_a_loaded_index(tmp_path):
+    client = write_index(tmp_path, ["one two three", "four five six"])
+
+    search = retrieve.make_searcher(
+        "ref-01",
+        config_path=write_config(tmp_path / "embeddings.toml"),
+        chunks_dir=tmp_path / "chunks",
+        index_dir=tmp_path / "index",
+        client=client,
+        tokenizer=WordTokenizer(),
+    )
+
+    assert search("one two three", 1)[0].chunk.text == "one two three"
+    assert search("four five six", 1)[0].chunk.text == "four five six"
 
 # --- guards ---------------------------------------------------------------
 

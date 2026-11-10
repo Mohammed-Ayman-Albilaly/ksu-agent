@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import unicodedata
 from pathlib import Path
@@ -36,17 +37,54 @@ from fetch_sources import (
 
 DEFAULT_OUT_DIR = REPO_ROOT / "data" / "processed"
 PAGE_MARKER = "[[page {number}]]"
+
 TATWEEL = "\u0640"
+ARABIC_INDIC_DIGITS = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"
+ARABIC_PERCENT = "\u066a"
+
+_DIGIT_RUN_RE = re.compile(r"[\u0660-\u0669]+")
+# The PDF draws the percent sign to the left of its number, so it is extracted
+# first: "٪٥٢" is the visual order of "٢٥٪".
+_PERCENT_BEFORE_NUMBER_RE = re.compile(r"\u066a(\s*)([0-9\u0660-\u0669]+)")
+_DIGITS_TO_ASCII = str.maketrans(ARABIC_INDIC_DIGITS, "0123456789")
+
+
+def fix_arabic_digits(text: str) -> str:
+    """Reverse every maximal Arabic-Indic digit run, then map it to ASCII.
+
+    The PDF stores these numbers visually, so a logical 1442 is extracted as ٢٤٤١;
+    reversing the run restores the order and the mapping makes the digits searchable.
+    Only runs of U+0660-U+0669 are touched, so ASCII runs such as "2,75" are
+    returned unchanged.
+    """
+    return _DIGIT_RUN_RE.sub(
+        lambda match: match.group(0)[::-1].translate(_DIGITS_TO_ASCII), text
+    )
+
+
+def fix_arabic_percent(text: str) -> str:
+    """Move a percent sign that precedes its number to after it, as ASCII "%".
+
+    "٪٥٢" is the visual order of "٢٥٪": the sign is put back on the right of
+    the number and mapped to "%", so "لا تزيد عن 25%" keeps its meaning. A sign
+    that does not directly precede a number is only mapped to "%".
+    """
+    moved = _PERCENT_BEFORE_NUMBER_RE.sub(
+        lambda match: f"{match.group(2)}{match.group(1)}%", text
+    )
+    return moved.replace(ARABIC_PERCENT, "%")
 
 
 def clean_text(text: str) -> str:
-    """Normalise to NFKC, then drop tatweel, which is only a stretching glyph.
+    """Normalise to NFKC, drop tatweel, then repair digits and percent signs.
 
     NFKC runs first so presentation forms and ligatures fold to their canonical
     letters; tatweel has no compatibility decomposition, so it survives that step
-    and is removed explicitly.
+    and is removed explicitly. NFKC leaves Arabic-Indic digits alone, so they are
+    fixed afterwards (see fix_arabic_digits).
     """
-    return unicodedata.normalize("NFKC", text).replace(TATWEEL, "")
+    normalised = unicodedata.normalize("NFKC", text).replace(TATWEEL, "")
+    return fix_arabic_digits(fix_arabic_percent(normalised))
 
 
 def extract_pages(pdf_path: Path) -> list[str]:

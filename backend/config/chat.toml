@@ -1,0 +1,27 @@
+# Answer-generation configuration for KSU Agent.
+#
+# The chat model is pinned here, never in a script or an endpoint: changing the
+# model or its sampling settings is a config change. The prices are used only to log
+# an estimated cost per answer.
+#
+#   provider              vendor whose API generates the answer
+#   model                 model id sent with every request
+#   temperature           sampling temperature; 0 keeps answers as repeatable as
+#                         the provider allows
+#   max_output_tokens     cap on the generated answer, in tokens
+#   price_per_1m_input    USD per 1,000,000 prompt tokens, for the cost estimate
+#   price_per_1m_output   USD per 1,000,000 generated tokens, for the estimate
+#   source_id             indexed source whose articles are retrieved and cited
+#   timeout_seconds       per-request timeout, so a slow call cannot hang a request
+#   max_retries           retries for transient errors (SDK backoff with jitter)
+
+[chat]
+provider = "openai"
+model = "gpt-4o-mini"
+temperature = 0.0
+max_output_tokens = 700
+price_per_1m_input = 0.15
+price_per_1m_output = 0.60
+source_id = "ref-01"
+timeout_seconds = 60
+max_retries = 3

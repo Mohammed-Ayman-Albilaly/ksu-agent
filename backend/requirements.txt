@@ -1,8 +1,13 @@
 # Backend runtime and ingestion dependencies.
 # Install with: python -m pip install -r backend/requirements.txt
 
+# HTTP API (backend/app), see docs/api-contract.md
+fastapi==0.121.0
+uvicorn==0.38.0
+# TestClient for the endpoint tests
+httpx==0.28.1
 numpy==2.4.4
-# Hosted embedding API, see backend/config/embeddings.toml
+# Hosted embedding and chat APIs, see backend/config/embeddings.toml and chat.toml
 openai==2.54.0
 pymupdf==2.1
 tiktoken==0.13.0
