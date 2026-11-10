@@ -130,3 +130,16 @@ Run python -m pytest backend/tests -q; if anything fails, stop and report.
 If it passes, commit on the current branch with message "feat: answer with citations, digit-order fix" and push with git push -u origin HEAD.
 Open a pull request into main; body: what changed, the numbers before and after the digit fix (21 reversed percentages and 57% for attendance, now 75% and zero Arabic-Indic digits), hit@k 0.50/0.80/0.80, and that q3 and q5 still miss.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
+
+## Prompt 21
+
+Add keyword search over the chunk texts in backend/scripts/retrieve.py: BM25 scoring with the same NFKC + tatweel cleaning and Arabic stopword-insensitive tokenization, and fuse it with the dense ranking using Reciprocal Rank Fusion (k=60).
+Add --mode dense|lexical|hybrid to the CLI (default hybrid) and keep the existing output format, then make eval/run_retrieval_eval.py accept the same flag and print hit@1, hit@3, hit@5 per mode.
+Add pytest tests with fake dense and lexical rankings proving RRF ordering, including one case where dense misses and lexical finds the article.
+Run the eval in all three modes on ref-01 and report the three hit@k rows side by side, plus which questions still miss at k=5 in hybrid.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 22
+
+Run python -m pytest backend/tests -q; if anything fails, stop and report. If it passes, commit on feat/hybrid-retrieval with message "feat: fuse BM25 with dense retrieval via RRF" and push with git push -u origin feat/hybrid-retrieval, then open a PR into main with body: hit@1 0.50 -> 0.60, hit@3 and hit@5 unchanged at 0.80, q3 and q5 still miss because BM25 needs exact word forms.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge.
