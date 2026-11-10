@@ -71,3 +71,42 @@ Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" head
 Option 1, with two changes: split only the chunks that exceed the model limit, and repeat the article heading at the start of every part so each part stands alone. Add "part" and "parts" fields to the JSONL and keep the same article_number for all parts of an article; still abort if any part stays over 8,191 tokens.
 Re-chunk ref-01, then re-run embed_chunks.py and report chunk count, vector count, dimensions, total tokens, estimated cost, and the largest chunk's token count.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 12
+
+Create backend/scripts/retrieve.py: read a source's .npz vectors and .jsonl chunks, embed a query using the same model/tokenizer from embeddings.toml, and return the top-k chunks sorted by cosine similarity. The query must be normalized using the same NFKC + tatweel removal as the parser. 
+Add a CLI to run a single query and output: the top-k result's article_number, its score, and a snippet of its text.
+Add pytest tests with a fake client: verify that a query exactly matching a chunk's text returns that chunk at position 0 with score 1.0.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 13
+
+The retrieval scores are far too low (0.56 for an exact match), which suggests the query is not being normalized. In backend/scripts/retrieve.py, import the clean_text function from backend.scripts.parse_source and apply it to the query string before embedding it. 
+Verify the fix by running the "Perfect Match" test: the score for "الحد الأدنى للمعدل المطلوب للتخرج هو 2,75" must be > 0.90.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 14
+
+The retrieval scores are far too low (0.56 for an exact match), which suggests the query is not being normalized. In backend/scripts/retrieve.py, import the clean_text function from backend.scripts.parse_source and apply it to the query string before embedding it. 
+Verify the fix by running the "Perfect Match" test: the score for "الحد الأدنى للمعدل المطلوب للتخرج هو 2,75" must be > 0.90.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 15
+
+The retrieval scores are far too low (0.56 for an exact match), which suggests the query is not being normalized. In backend/scripts/retrieve.py, import the clean_text function from backend.scripts.parse_source and apply it to the query string before embedding it. 
+Verify the fix by running the "Perfect Match" test: the score for "الحد الأدنى للمعدل المطلوب للتخرج هو 2,75" must be > 0.90.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 16
+
+Keep the query clean_text call in backend/scripts/retrieve.py. Create eval/questions_regulation.json with these 10 items, each {id, question, expected_articles, note}: q1 "كم نسبة الغياب اللي تمنعني من دخول الاختبار النهائي؟" -> [25,26]; q2 "اذا غبت عن الفاينل بعذر كيف أقدم على اختبار بديل؟" -> [32]; q3 "أقدر أأجل الترم كامل؟" -> [54]; q4 "أبغى أنسحب من مقرر، وش الشروط؟" -> [56]; q5 "كم إنذار يجيني قبل ما أفصل من الجامعة؟" -> [58]; q6 "انقطعت عن الدراسة سنة، كيف أرجع؟" -> [60]; q7 "أبغى أحول من تخصص لتخصص ثاني داخل الكلية" -> [38]; q8 "كم المعدل المطلوب عشان أتخرج؟" -> [62]; q9 "درست مقرر برا الجامعة، كيف يعادلونه؟" -> [37]; q10 "الدراسة فصلين ولا ثلاثة، وفيه صيفي؟" -> [8].
+Create eval/run_retrieval_eval.py: for each question call the retriever, take top 5, print the rank of the expected article per question, then hit@1, hit@3 and hit@5 over all 10.
+Add pytest tests with a fake retriever so the scoring logic is covered offline. Run the script on ref-01 and report hit@1, hit@3, hit@5 and every question that missed at k=5.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+
+## Prompt 17
+
+Run `python -m pytest backend/tests -q`; if anything fails, stop and report.
+If it passes, commit on fix/retrieve-normalization with message "feat: normalize queries and measure retrieval hit@k" and push with `git push -u origin fix/retrieve-normalization`.
+Open a pull request into main with that title; body: what changed, the measured numbers (hit@1 0.50, hit@3 0.80, hit@5 0.80), and that q3 and q5 miss because of dialect-vs-legal wording.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge the pull request.
