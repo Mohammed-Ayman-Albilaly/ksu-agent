@@ -150,3 +150,9 @@ Create eval/run_answer_eval.py: for each question in eval/questions_regulation.j
 Print a per-question table, then the summary: citation_presence, expected_article_cited, median and p95 latency, and the estimated cost from chat.toml.
 Add pytest tests with a fake LLM and retriever for the scoring logic, then run it live on ref-01 and report the full table and summary.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
+## Prompt 24
+
+In backend/app/main.py add CORSMiddleware allowing exactly http://localhost:3000 with allow_credentials=True and explicit methods and headers, never "*", and change the /chat 422 responses to short codes (message_empty, message_too_long) instead of sentences.
+In docs/api-contract.md add the auth endpoints the front-end team listed (register, login, logout, me, cookie session, 401 on unauthenticated chat, validation codes) under a heading "Planned, not implemented", quoting their shapes and status codes without inventing any behaviour.
+Add pytest tests for the CORS headers on an OPTIONS preflight from http://localhost:3000 and for both 422 codes, then run the preflight and report the headers and status codes.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
