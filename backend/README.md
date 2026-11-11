@@ -31,6 +31,18 @@ The PDF is hashed again before parsing; a mismatch with the lock file stops the
 run instead of producing a meta file that lies.
 
 Tests: `python -m pytest backend/tests` (no network needed).
+## Retrieval
+
+```bash
+python backend/scripts/retrieve.py --source-id ref-01 --query "..." --mode hybrid
+python eval/run_retrieval_eval.py --source-id ref-01 --mode hybrid
+```
+
+`--mode` is `dense` (cosine over the stored vectors), `lexical` (BM25 over the
+chunk texts, same NFKC + tatweel cleaning, Arabic stopwords ignored) or `hybrid`
+(the two rankings fused with Reciprocal Rank Fusion, k=60). `hybrid` is the default
+and what `answer.py` retrieves with; `lexical` never calls the embedding provider,
+so it works without a key. The eval prints hit@1, hit@3 and hit@5 for the mode it ran.
 
 ## Answering
 

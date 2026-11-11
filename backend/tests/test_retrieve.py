@@ -158,11 +158,13 @@ def run(
     query,
     *,
     k=5,
+    mode=retrieve.MODE_DENSE,
     client=None,
     tokenizer=None,
     article_numbers=None,
     **config_overrides,
 ):
+    """Dense retrieval by default: these tests assert cosine scores."""
     client = write_index(
         tmp_path, texts, client=client, article_numbers=article_numbers
     )
@@ -170,6 +172,7 @@ def run(
         "ref-01",
         query,
         k=k,
+        mode=mode,
         config_path=write_config(tmp_path / "embeddings.toml", **config_overrides),
         chunks_dir=tmp_path / "chunks",
         index_dir=tmp_path / "index",
@@ -382,6 +385,8 @@ def test_cli_prints_article_score_and_snippet(tmp_path, monkeypatch, capsys):
             "one two three",
             "--k",
             "1",
+            "--mode",
+            "dense",
             "--config",
             str(config),
             "--chunks-dir",

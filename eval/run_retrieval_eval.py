@@ -9,11 +9,15 @@ at k=5.
 A question counts as a hit at k when any of its expected articles is among the
 top k chunks; its rank is the position of the first one found.
 
+``--mode`` selects the ranking measured — dense, lexical (BM25) or hybrid (RRF
+fusion of the two) — exactly as retrieve.py does, so the same golden set can be
+compared across the three rankers.
+
 The scoring functions take the search as a callable, so the tests run offline
 with a fake retriever and never touch the embedding provider.
 
 Usage:
-    python eval/run_retrieval_eval.py --source-id ref-01
+    python eval/run_retrieval_eval.py --source-id ref-01 --mode hybrid
 """
 
 from __future__ import annotations
@@ -149,31 +153,42 @@ def misses(rows: Sequence[Row], k: int = DEFAULT_K) -> list[Row]:
 def make_search(
     source_id: str,
     *,
+    mode: str = retrieve.DEFAULT_MODE,
     config_path: Path = retrieve.DEFAULT_CONFIG,
     chunks_dir: Path = retrieve.DEFAULT_CHUNKS_DIR,
     index_dir: Path = retrieve.DEFAULT_INDEX_DIR,
     client=None,
 ) -> Callable[[str, int], list]:
-    """Load the index once and return ``search(question, k)``."""
+    """Load the index once and return ``search(question, k)`` for one mode."""
+    retrieve.check_mode(mode)
     config = retrieve.load_config(config_path)
     vectors, chunks, _metadata = retrieve.load_index(
         source_id, config, chunks_dir=chunks_dir, index_dir=index_dir
     )
-    client = client or retrieve.make_client(config)
-    tokenizer = retrieve.make_tokenizer(config)
+    bm25 = retrieve.build_bm25_index(chunks)
+
+    # Lexical search never calls the embedding provider, so it must not need a key.
+    needs_embeddings = mode in (retrieve.MODE_DENSE, retrieve.MODE_HYBRID)
+    client = client or (retrieve.make_client(config) if needs_embeddings else None)
+    tokenizer = retrieve.make_tokenizer(config) if needs_embeddings else None
 
     def search(question: str, k: int = DEFAULT_K) -> list:
-        _normalized, query_vector = retrieve.embed_query(
-            question, config, client, tokenizer=tokenizer
-        )
-        return retrieve.rank(
-            retrieve.cosine_scores(vectors, query_vector), chunks, k
+        return retrieve.search_chunks(
+            question,
+            vectors=vectors,
+            chunks=chunks,
+            bm25=bm25,
+            mode=mode,
+            config=config,
+            client=client,
+            tokenizer=tokenizer,
+            k=k,
         )
 
     return search
 
 
-def report(rows: Sequence[Row], k: int = DEFAULT_K) -> None:
+def report(rows: Sequence[Row], k: int = DEFAULT_K, *, mode: str | None = None) -> None:
     """Print one line per question, the hit rates and the misses."""
     for row in rows:
         rank = str(row.rank) if row.rank is not None else "-"
@@ -182,7 +197,10 @@ def report(rows: Sequence[Row], k: int = DEFAULT_K) -> None:
 
     metrics = summarize(rows)
     line = "  ".join(f"{name} {value:.2f}" for name, value in metrics.items())
-    print(f"\n{line}  ({len(rows)} questions, k={k})")
+    label = f" ({len(rows)} questions, k={k}"
+    if mode:
+        label += f", mode={mode}"
+    print(f"\n{line}{label})")
 
     missed = misses(rows, k)
     if missed:
@@ -205,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=DEFAULT_QUESTIONS,
         help=f"golden question file (default: {DEFAULT_QUESTIONS})",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=retrieve.MODES,
+        default=retrieve.DEFAULT_MODE,
+        help=f"ranking to measure (default: {retrieve.DEFAULT_MODE})",
     )
     parser.add_argument(
         "--k",
@@ -236,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         questions = load_questions(args.questions)
         search = make_search(
             args.source_id,
+            mode=args.mode,
             config_path=args.config,
             chunks_dir=args.chunks_dir,
             index_dir=args.index_dir,
@@ -245,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    report(rows, args.k)
+    report(rows, args.k, mode=args.mode)
     return 0
 
 

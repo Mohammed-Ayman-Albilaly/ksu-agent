@@ -187,3 +187,18 @@ def test_report_prints_ranks_metrics_and_misses(capsys):
     assert "hit@3 0.50" in out
     assert "hit@5 0.50" in out
     assert "missed at k=5: q2" in out
+
+
+def test_report_names_the_mode_it_measured(capsys):
+    rows = [ev.Row(question=make_question("q1", [25]), rank=1, top_articles=(25,))]
+
+    ev.report(rows, k=5, mode="lexical")
+
+    out = capsys.readouterr().out
+    assert "mode=lexical" in out
+    assert "hit@1 1.00" in out
+
+
+def test_eval_accepts_the_same_modes_as_retrieve():
+    assert set(ev.retrieve.MODES) == {"dense", "lexical", "hybrid"}
+    assert ev.retrieve.DEFAULT_MODE == "hybrid"
