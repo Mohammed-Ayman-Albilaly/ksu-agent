@@ -143,3 +143,10 @@ Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" head
 
 Run python -m pytest backend/tests -q; if anything fails, stop and report. If it passes, commit on feat/hybrid-retrieval with message "feat: fuse BM25 with dense retrieval via RRF" and push with git push -u origin feat/hybrid-retrieval, then open a PR into main with body: hit@1 0.50 -> 0.60, hit@3 and hit@5 unchanged at 0.80, q3 and q5 still miss because BM25 needs exact word forms.
 Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not merge.
+
+## Prompt 23
+
+Create eval/run_answer_eval.py: for each question in eval/questions_regulation.json call the answer pipeline and record the answer text, cited article numbers, whether any citation exists, whether an expected article was cited, and latency in ms. Add one unanswerable question "متى حفل التخرج؟" that must return the fallback with no citations.
+Print a per-question table, then the summary: citation_presence, expected_article_cited, median and p95 latency, and the estimated cost from chat.toml.
+Add pytest tests with a fake LLM and retriever for the scoring logic, then run it live on ref-01 and report the full table and summary.
+Save this prompt in "docs/prompts/prompts-log.md" under the next "Prompt N" heading. Do not commit and do not open a PR.
