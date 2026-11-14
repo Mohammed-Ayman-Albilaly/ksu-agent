@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 import answer
-from app.auth.routes import router as auth_router
+from app.auth.routes import require_user, router as auth_router
 
 LOGGER = logging.getLogger(__name__)
 
@@ -124,9 +124,12 @@ def get_client():
     return answer.make_client(get_config())
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(require_user)])
 def chat(request: ChatRequest) -> ChatResponse:
-    """Answer one question from the regulation and cite the articles used."""
+    """Answer one question from the regulation and cite the articles used.
+
+    Only for a signed-in student: require_user answers 401 before this runs.
+    """
     # Built here rather than through Depends: FastAPI solves dependencies before
     # the request body, so a dependency would load the index and the model client
     # for a body it then rejects with a 422. Called after validation, a rejected

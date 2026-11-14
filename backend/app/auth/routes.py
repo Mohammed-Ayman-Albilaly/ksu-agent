@@ -12,6 +12,8 @@ POST /auth/login     {email, password}
 POST /auth/logout    204, cookie cleared
 GET  /auth/me        200 {user} · 401 {error: "unauthenticated"}
 
+require_user() guards POST /chat: 401 {detail: "unauthenticated"} without a session.
+
 Email verification (built, switched off by auth.toml until SMTP is ready):
 POST /auth/verify    {email, code} -> 200 {user} + cookie
     400 {error: "invalid_code" | "code_expired"} · 429 {error: "too_many_attempts"}
@@ -29,7 +31,7 @@ import re
 import time
 from functools import lru_cache
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
@@ -159,13 +161,26 @@ def start_session(response: Response, user: User, config: AuthConfig) -> None:
 def current_user(request: Request) -> User | None:
     """The signed-in user for this request's cookie, or None.
 
-    Ready for POST /chat to require sign-in later (contract: 401 when not signed in).
+    POST /chat requires it through require_user (contract: 401 when not signed in).
     """
     config = get_config()
     token = request.cookies.get(config.cookie_name)
     if not token:
         return None
     return get_store().session_user(security.digest(token), clock())
+
+
+def require_user(request: Request) -> User:
+    """Dependency for routes that need a signed-in student.
+
+    401 {"detail": "unauthenticated"} without a valid session cookie. FastAPI runs
+    it before the endpoint, so an anonymous request never reaches the retriever or
+    the model and costs nothing.
+    """
+    user = current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="unauthenticated")
+    return user
 
 
 def send_new_code(user: User, config: AuthConfig) -> bool:

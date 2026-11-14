@@ -373,3 +373,86 @@ def test_smtp_settings_are_required_when_verification_is_on(tmp_path, monkeypatc
     env.write_text("SMTP_HOST=smtp.example.com\nSMTP_FROM=agent@example.com\n")
     settings = auth_config.load_smtp_settings(env)
     assert settings.port == 587 and settings.host == "smtp.example.com"
+
+
+# --- POST /chat requires sign-in --------------------------------------------
+
+
+def _fake_answering(monkeypatch, tmp_path):
+    """Fake retriever, model and config for /chat, the same fakes test_chat uses."""
+    import answer
+    from test_answer import (
+        GRADUATION_TEXT,
+        FakeChatClient,
+        FakeRetriever,
+        make_result,
+        reply,
+        write_config,
+    )
+
+    fake = FakeChatClient(reply(True, "الحد الأدنى 2,75 (المادة 62)."), None)
+    retriever = FakeRetriever([make_result(62, GRADUATION_TEXT)])
+    config = answer.load_config(write_config(tmp_path / "chat.toml"))
+    monkeypatch.setattr(main, "get_retriever", lambda: retriever)
+    monkeypatch.setattr(main, "get_client", lambda: fake)
+    monkeypatch.setattr(main, "get_config", lambda: config)
+    return fake
+
+
+def test_chat_without_a_session_is_401_and_costs_nothing(auth, monkeypatch, tmp_path):
+    client, *_ = auth()
+    fake = _fake_answering(monkeypatch, tmp_path)
+
+    response = client.post("/chat", json={"message": "كم المعدل المطلوب؟"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthenticated"}
+    assert fake.calls == []
+
+
+def test_chat_auth_is_checked_before_the_message(auth, monkeypatch, tmp_path):
+    client, *_ = auth()
+    _fake_answering(monkeypatch, tmp_path)
+    response = client.post("/chat", json={"message": ""})
+    assert response.status_code == 401
+
+
+def test_chat_with_a_bad_or_expired_session_is_401(auth, monkeypatch, tmp_path):
+    client, _mailer, _store, now = auth()
+    _fake_answering(monkeypatch, tmp_path)
+
+    client.cookies.set("ksu_session", "not-a-real-token")
+    assert client.post("/chat", json={"message": "سؤال"}).status_code == 401
+
+    client.cookies.clear()
+    register(client)
+    now["t"] += 7 * 86_400 + 1
+    assert client.post("/chat", json={"message": "سؤال"}).status_code == 401
+
+
+def test_chat_with_a_session_answers(auth, monkeypatch, tmp_path):
+    client, *_ = auth()
+    fake = _fake_answering(monkeypatch, tmp_path)
+    register(client)
+
+    response = client.post("/chat", json={"message": "كم المعدل المطلوب؟", "session_id": "s"})
+
+    assert response.status_code == 200
+    assert response.json()["citations"][0]["article"] == 62
+    assert len(fake.calls) == 1
+
+    client.post("/auth/logout")
+    client.cookies.clear()
+    assert client.post("/chat", json={"message": "سؤال"}).status_code == 401
+
+
+def test_chat_401_carries_cors_headers_for_the_front_end(auth, monkeypatch, tmp_path):
+    client, *_ = auth()
+    _fake_answering(monkeypatch, tmp_path)
+    response = client.post(
+        "/chat",
+        json={"message": "سؤال"},
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert response.status_code == 401
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
