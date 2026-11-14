@@ -46,9 +46,23 @@ function parseCitations(value: unknown): Citation[] | null {
       return null;
     }
 
+    // The backend sends the article number as an integer, or null for chunks
+    // without one (the annex). Keep it as text for display and storage.
+    let articleText: string;
+
+    if (typeof article === "string") {
+      articleText = article;
+    } else if (typeof article === "number" && Number.isFinite(article)) {
+      articleText = String(article);
+    } else if (article === null || article === undefined) {
+      articleText = "";
+    } else {
+      return null;
+    }
+
     citations.push({
       title,
-      article: typeof article === "string" ? article : "",
+      article: articleText,
       url,
     });
   }
