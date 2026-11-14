@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 import answer
+from app.auth.routes import router as auth_router
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ app.add_middleware(
     allow_methods=ALLOWED_METHODS,
     allow_headers=ALLOWED_HEADERS,
 )
+
+app.include_router(auth_router)
 
 
 def _message_validation_code(exc: RequestValidationError) -> str | None:
