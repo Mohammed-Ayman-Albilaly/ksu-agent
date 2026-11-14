@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 
 import answer
 from app import main
+from app.auth.routes import require_user
+from app.auth.store import User
 
 from test_answer import (
     GRADUATION_TEXT,
@@ -23,6 +25,15 @@ from test_answer import (
 )
 
 QUESTION = "كم المعدل المطلوب عشان أتخرج؟"
+
+SIGNED_IN = User(
+    id="u-1",
+    full_name="Test Student",
+    email="444100001@student.ksu.edu.sa",
+    password_hash="scrypt$unused",
+    lang="ar",
+    email_verified=True,
+)
 
 
 @pytest.fixture
@@ -40,6 +51,9 @@ def api(tmp_path, monkeypatch):
         monkeypatch.setattr(main, "get_retriever", lambda: retriever)
         monkeypatch.setattr(main, "get_client", lambda: chat_client)
         monkeypatch.setattr(main, "get_config", lambda: config)
+        # /chat requires sign-in; these tests are about answering, so they run as a
+        # signed-in student. The 401 itself is tested in test_auth.py.
+        monkeypatch.setitem(main.app.dependency_overrides, require_user, lambda: SIGNED_IN)
 
         return TestClient(main.app), chat_client
 

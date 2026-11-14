@@ -1,0 +1,32 @@
+# Sign-up, login and email-verification settings for KSU Agent.
+#
+# Secrets never live here: the SMTP account used to send verification codes is
+# read from .env (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM).
+#
+#   email_verification    false: accounts are active as soon as they register
+#                         (current behaviour). true: registration sends a one-time
+#                         code by email and the account cannot log in until the code
+#                         is confirmed at POST /auth/verify. Needs the SMTP_* values.
+#   allowed_email_domain  only addresses at this domain may register
+#   db_path               SQLite file for users, sessions and codes; relative paths
+#                         are from the repository root. data/private/ is git-ignored.
+#   session_days          lifetime of the login cookie and its server-side session
+#   cookie_name           name of the httpOnly session cookie
+#   cookie_secure         true sends the cookie over HTTPS only; keep false for
+#                         http://localhost during development
+#   otp_length            digits in a verification code
+#   otp_ttl_minutes       how long a code stays valid
+#   otp_max_attempts      wrong guesses allowed before the code is discarded
+#   otp_resend_seconds    minimum wait between two codes for the same address
+
+[auth]
+email_verification = false
+allowed_email_domain = "student.ksu.edu.sa"
+db_path = "data/private/auth.sqlite3"
+session_days = 7
+cookie_name = "ksu_session"
+cookie_secure = false
+otp_length = 6
+otp_ttl_minutes = 10
+otp_max_attempts = 5
+otp_resend_seconds = 60
