@@ -113,6 +113,7 @@ export type Dictionary = {
     copy: string;
     copied: string;
     sources: string;
+    articleLabel: string;
     opensInNewTab: string;
     noSource: string;
     searching: string;
@@ -272,6 +273,7 @@ const ar: Dictionary = {
     copy: "نسخ الإجابة",
     copied: "تم النسخ",
     sources: "المصادر",
+    articleLabel: "المادة",
     opensInNewTab: "يفتح في تبويب جديد",
     noSource:
       "لم يُعثر على مصدر رسمي لهذه الإجابة. للتأكد، راجع عمادة القبول والتسجيل.",
@@ -438,6 +440,7 @@ const en: Dictionary = {
     copy: "Copy answer",
     copied: "Copied",
     sources: "Sources",
+    articleLabel: "Article",
     opensInNewTab: "opens in a new tab",
     noSource:
       "No official source was found for this answer. Please confirm with the Deanship of Admission and Registration.",

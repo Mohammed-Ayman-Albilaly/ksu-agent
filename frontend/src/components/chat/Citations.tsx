@@ -42,6 +42,9 @@ export function Citations({ citations }: CitationsProps) {
           const href = safeHref(citation.url);
           const article = citation.article.trim();
           const showArticle = article !== "" && article !== "—";
+          const articleText = /^\d+$/.test(article)
+            ? `${t.chat.articleLabel} ${article}`
+            : article;
 
           const content = (
             <>
@@ -53,7 +56,7 @@ export function Citations({ citations }: CitationsProps) {
                 {showArticle ? (
                   <span className="text-muted" dir="auto">
                     {" · "}
-                    {article}
+                    {articleText}
                   </span>
                 ) : null}
               </span>
