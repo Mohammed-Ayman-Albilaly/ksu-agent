@@ -394,6 +394,37 @@ def test_question_at_the_limit_is_accepted(tmp_path):
     assert result.used_fallback is False
 
 
+# --- the request the model is sent ----------------------------------------
+
+
+def test_the_answer_model_is_asked_for_a_json_object_not_a_schema(tmp_path):
+    """The gateway does not offer json_schema, so the request must not send one.
+
+    The strict parse in parse_model_answer is the guard, not the schema: a reply that is
+    not the answer object still falls back.
+    """
+    client = FakeChatClient(reply(True, "المادة 25."))
+    config = answer.load_config(write_config(tmp_path / "chat.toml"))
+
+    answer.ask_model(config, client, [{"role": "user", "content": "سؤال"}])
+
+    call = client.calls[0]
+    assert call["response_format"] == {"type": "json_object"}
+    assert "json_schema" not in call["response_format"]
+
+
+def test_the_answer_model_is_asked_not_to_think(tmp_path):
+    """Thinking is on by default on the gateway and would break the latency target."""
+    client = FakeChatClient(reply(True, "المادة 25."))
+    config = answer.load_config(
+        write_config(tmp_path / "chat.toml", reasoning_effort="none")
+    )
+
+    answer.ask_model(config, client, [{"role": "user", "content": "سؤال"}])
+
+    assert client.calls[0]["extra_body"] == {"reasoning_effort": "none"}
+
+
 # --- config and cost ------------------------------------------------------
 
 

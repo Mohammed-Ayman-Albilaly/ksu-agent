@@ -44,8 +44,9 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Any, Callable, Sequence
 
-from embed_chunks import api_key
+import gateway
 from fetch_sources import REPO_ROOT, load_sources
+from gateway import api_key
 from retrieve import DEFAULT_K, SearchResult, make_searcher
 
 LOGGER = logging.getLogger(__name__)
@@ -168,33 +169,6 @@ USER_PROMPT_TEMPLATE = """السؤال:
 
 المواد المسترجعة (لا تستخدم غيرها):
 {articles}"""
-
-# Strict JSON schema: the answer is parsed, never scraped out of prose, so a
-# malformed reply falls back instead of reaching the student.
-ANSWER_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "regulation_answer",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "supported": {
-                    "type": "boolean",
-                    "description": "true only when the retrieved articles answer "
-                    "the question",
-                },
-                "answer": {
-                    "type": "string",
-                    "description": "Arabic answer citing article numbers; empty "
-                    "when supported is false",
-                },
-            },
-            "required": ["supported", "answer"],
-            "additionalProperties": False,
-        },
-    },
-}
 
 _ARTICLE_REFERENCE = re.compile(r"المادة\s*(?:رقم\s*)?([0-9\u0660-\u0669]+)")
 _ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
@@ -328,14 +302,13 @@ def load_source(source_id: str, config_path: Path = DEFAULT_SOURCES) -> SourceRe
 
 
 def make_client(config: ChatConfig):
-    """OpenAI client for the configured provider; the key comes from .env."""
-    from openai import OpenAI
+    """The chat client for the configured gateway; the key comes from .env.
 
-    return OpenAI(
-        api_key=api_key(),
-        timeout=config.timeout_seconds,
-        max_retries=config.max_retries,
-    )
+    The key is read here, so a missing one fails here — naming the variable and
+    never its value — instead of deeper inside the client, and the endpoint answers
+    503 for it. The value read here is the one the client is built with.
+    """
+    return gateway.make_chat_client(config, key=api_key(config))
 
 
 def format_articles(results: Sequence[SearchResult]) -> str:
@@ -579,9 +552,10 @@ def ask_model(
 ) -> tuple[str | None, object | None]:
     """Call the chat model once; returns its text and usage.
 
-    The SDK's own timeout and retry settings (from the config) have already been
-    applied when this raises. The message names the model and the error type only:
-    neither the prompt nor the API key is ever logged.
+    The JSON mode and the thinking mode come from the gateway module, so the citation
+    contract's strict parse is the guard and not the schema. The SDK's own timeout and
+    retry settings have already been applied when this raises. The message names the model
+    and the error type only: neither the prompt nor the API key is ever logged.
     """
     try:
         response = client.chat.completions.create(
@@ -589,7 +563,7 @@ def ask_model(
             messages=messages,
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
-            response_format=ANSWER_FORMAT,
+            **gateway.chat_kwargs(config),
         )
     except Exception as exc:  # network, timeout, rate limit, provider error
         raise ModelUnavailable(

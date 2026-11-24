@@ -7,6 +7,7 @@ outside the set. Nothing here may log the question.
 """
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -165,6 +166,20 @@ def test_the_call_uses_the_configured_model_at_temperature_zero():
     assert call["temperature"] == 0.0
     assert call["timeout"] == INTENT_TIMEOUT_SECONDS == 3.0
     assert call["response_format"] == {"type": "json_object"}
+
+
+def test_the_classifier_is_asked_not_to_think():
+    """Routing is one short call, and thinking would make every question pay for it.
+
+    The shipped config names the gateway, whose thinking mode is on by default; this
+    config is the shipped one with that setting, so the call is the one a gateway makes.
+    """
+    client = FakeChatClient(content=json.dumps({"route": "regulation"}))
+    config = replace(CONFIG, reasoning_effort="none")
+
+    classify(QUESTION, client=client, config=config)
+
+    assert client.calls[0]["extra_body"] == {"reasoning_effort": "none"}
 
 
 def test_the_question_is_the_only_user_text_sent():

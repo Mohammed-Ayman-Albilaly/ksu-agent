@@ -4,6 +4,46 @@ The prompt sent to each sub-agent, per task. Newest task first. Nothing is
 paraphrased: an entry is the prompt as sent, followed by what came back that the
 plan did not anticipate.
 
+## Task 2 — ai-ml-engineer — 2026-11-24
+
+You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.
+
+Implement **Task 2 only** ("The answer model moves to the gateway") from the plan at `docs/superpowers/plans/2026-11-24-gateway-provider.md`. Read that plan file first, and the design spec at `docs/superpowers/specs/2026-11-24-gateway-provider-design.md`.
+
+Task 1 is already committed: `backend/scripts/gateway.py` exists with `api_key`, `make_chat_client`, `make_embed_client`, `chat_kwargs` and `embed_kwargs`, and both TOML files already name the gateway. Do not redo any of it.
+
+Follow Task 2's steps exactly. The deliverable is: `answer.ask_model` and `answer.make_client` call through the gateway, `backend/app/intent.py`'s `_asked_route` sends the JSON mode and the thinking mode, and the `ANSWER_FORMAT` and `INTENT_FORMAT` schema dictionaries are gone.
+
+Rules you must not break:
+- Add new tests only. Do not edit an existing test's assertion. The two shipped-config pin tests were already re-pinned in Task 1, so leave them alone.
+- Do not commit, do not push, do not checkout or create a branch. Leave your work in the working tree; the parent agent commits it.
+- Do not print, log or echo the contents of `.env` or any API key value.
+- `answer.ChatConfig` must stay constructible without `base_url`, `api_key_env`, `json_mode` and `reasoning_effort`, because `backend/tests/test_answer_eval.py` and `backend/tests/test_intent.py` build it by keyword without them.
+- `answer.ask_model` and `intent.classify` must keep their names and signatures.
+- `backend/scripts/gateway.py` must not import `embed_chunks`.
+
+Verify with both of these, and report their exact output:
+1. `venv\Scripts\python.exe -m pytest backend/tests/test_answer.py backend/tests/test_intent.py -v`
+2. `venv\Scripts\python.exe -m pytest backend/tests/ -q`
+
+In your reply report: the exact test counts from both runs, every file you modified with its path, and anything the plan told you to do that did not work or that you had to do differently.
+
+### What the reply changed, and why
+
+1. `make_config()` is in `test_answer_eval.py`, not `test_answer.py`, so the new
+   tests build a config with `write_config` and `load_config` instead.
+2. `test_intent.py`'s `CONFIG` has no `reasoning_effort`, so `chat_kwargs`
+   correctly omits `extra_body`. The new classifier test uses
+   `replace(CONFIG, reasoning_effort="none")` rather than editing `CONFIG`,
+   which every existing classifier test builds on.
+3. `make_client` reads the key itself and passes it to
+   `gateway.make_chat_client(config, key=...)`, so the key is read once and
+   `answer.api_key` stays the seam `test_chat_endpoint.py` patches. The plan's
+   one-line delegation made that patch dead.
+4. The answer eval cannot run before Task 3: `run_answer_eval.py` refuses the old
+   index, which was built with `text-embedding-3-small`. That is expected, and the
+   gate runs after the re-index.
+
 ## Task 1 — ai-ml-engineer — 2026-11-24
 
 You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.

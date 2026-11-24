@@ -21,6 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
+
+import gateway
+
 from app.tools import REASONING_TOOLS, ToolRequest, detect_reasoning_kind
 
 LOGGER = logging.getLogger(__name__)
@@ -32,8 +35,6 @@ INTENT_TIMEOUT_SECONDS = 3.0
 # {"route": "reason:academic_warning"} is a handful of tokens; the cap only stops a model that
 # decides to explain itself.
 INTENT_MAX_TOKENS = 24
-
-INTENT_FORMAT = {"type": "json_object"}
 
 REGULATION = "regulation"
 REASON_PREFIX = "reason:"
@@ -202,7 +203,12 @@ def route_name(request: ToolRequest, message: str) -> str:
 
 
 def _asked_route(message: str, *, client, config) -> str:
-    """Call the model once and read its route; anything unreadable is a ValueError."""
+    """Call the model once and read its route; anything unreadable is a ValueError.
+
+    The JSON mode and the thinking mode come from the gateway module: the gateway offers
+    json_object and not a schema, and its thinking mode is on by default, which a routing
+    decision that must take a moment cannot afford.
+    """
     response = client.chat.completions.create(
         model=config.model,
         messages=[
@@ -213,7 +219,7 @@ def _asked_route(message: str, *, client, config) -> str:
         temperature=0.0,
         max_tokens=INTENT_MAX_TOKENS,
         timeout=INTENT_TIMEOUT_SECONDS,
-        response_format=INTENT_FORMAT,
+        **gateway.chat_kwargs(config),
     )
     route = _reply_object(_content(response)).get("route")
 

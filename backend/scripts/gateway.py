@@ -66,24 +66,32 @@ def api_key(config=None, env_file: Path = DEFAULT_ENV_FILE) -> str:
     return value
 
 
-def make_chat_client(config, env_file: Path = DEFAULT_ENV_FILE):
-    """The chat client for the configured gateway."""
+def make_chat_client(
+    config, env_file: Path = DEFAULT_ENV_FILE, key: str | None = None
+):
+    """The chat client for the configured gateway.
+
+    ``key`` lets a caller that already read the key pass it in, so the key is read
+    once and the caller's own seam stays the one that fails on a missing key.
+    """
     from openai import OpenAI
 
     return OpenAI(
-        api_key=api_key(config, env_file),
+        api_key=key or api_key(config, env_file),
         base_url=config.base_url,
         timeout=config.timeout_seconds,
         max_retries=config.max_retries,
     )
 
 
-def make_embed_client(config, env_file: Path = DEFAULT_ENV_FILE):
+def make_embed_client(
+    config, env_file: Path = DEFAULT_ENV_FILE, key: str | None = None
+):
     """The embedding client for the configured gateway."""
     from openai import OpenAI
 
     return OpenAI(
-        api_key=api_key(config, env_file),
+        api_key=key or api_key(config, env_file),
         base_url=config.base_url,
         timeout=DEFAULT_TIMEOUT_SECONDS,
         max_retries=DEFAULT_MAX_RETRIES,
