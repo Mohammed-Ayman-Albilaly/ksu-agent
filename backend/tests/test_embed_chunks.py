@@ -250,3 +250,50 @@ def test_missing_chunk_file_points_at_chunk_source(tmp_path):
             client=FakeClient(),
             tokenizer=WordTokenizer(),
         )
+
+
+# --- the request parameters ------------------------------------------------
+
+
+class RecordingEmbeddingClient(FakeClient):
+    """A fake that records each request's parameters, not only its inputs."""
+
+    def __init__(self, dimensions=DIMENSIONS):
+        super().__init__(dimensions=dimensions)
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
+        return super().create(**kwargs)
+
+
+def make_config(tmp_path, **overrides):
+    """The embedding config as the scripts load it: written to TOML, then read back."""
+    path = write_config(tmp_path / "embeddings.toml", **overrides)
+    return embed_chunks.load_config(path)
+
+
+def test_the_embed_request_sends_no_dimensions_unless_the_config_asks(tmp_path):
+    """A model that does not know the parameter may reject the whole request."""
+    config = make_config(tmp_path)
+    client = RecordingEmbeddingClient(dimensions=config.dimensions)
+    chunks = [
+        embed_chunks.Chunk(index=0, article_number=1, heading="المادة 1", text="نص")
+    ]
+
+    embed_chunks.embed_chunks(config, chunks, [3], client)
+
+    assert "dimensions" not in client.calls[0]
+    assert client.calls[0]["encoding_format"] == "float"
+
+
+def test_the_embed_request_sends_the_dimensions_when_the_config_asks(tmp_path):
+    config = make_config(tmp_path, send_dimensions=True)
+    client = RecordingEmbeddingClient(dimensions=config.dimensions)
+    chunks = [
+        embed_chunks.Chunk(index=0, article_number=1, heading="المادة 1", text="نص")
+    ]
+
+    embed_chunks.embed_chunks(config, chunks, [3], client)
+
+    assert client.calls[0]["dimensions"] == config.dimensions

@@ -41,6 +41,7 @@ from embed_chunks import (
     DEFAULT_CONFIG,
     DEFAULT_INDEX_DIR,
     EmbeddingConfig,
+    embed_kwargs,
     load_config,
     make_client,
     make_tokenizer,
@@ -436,8 +437,7 @@ def embed_query(
     response = client.embeddings.create(
         model=config.model,
         input=[normalized],
-        dimensions=config.dimensions,
-        encoding_format="float",
+        **embed_kwargs(config),
     )
     if len(response.data) != 1:
         raise ValueError(

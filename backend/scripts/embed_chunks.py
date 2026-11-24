@@ -39,9 +39,12 @@ import numpy as np
 
 from fetch_sources import REPO_ROOT, sha256_file
 
+import gateway
+
 # Re-exported from the gateway module: app/auth/config.py, app/route_token.py and the
 # tests import the env helpers from here, so they must stay importable from here.
-from gateway import DEFAULT_ENV_FILE, api_key, load_env_file
+# embed_kwargs is re-exported for retrieve.py, which calls the provider the same way.
+from gateway import DEFAULT_ENV_FILE, api_key, embed_kwargs, load_env_file
 
 DEFAULT_CONFIG = REPO_ROOT / "backend" / "config" / "embeddings.toml"
 DEFAULT_CHUNKS_DIR = REPO_ROOT / "data" / "processed" / "chunks"
@@ -51,8 +54,6 @@ DEFAULT_INDEX_DIR = REPO_ROOT / "data" / "processed" / "index"
 ENV_KEY = "OPENAI_API_KEY"
 VECTOR_KEY = "vectors"
 TOKENS_PER_PRICE_UNIT = 1_000_000
-DEFAULT_TIMEOUT_SECONDS = 60.0
-DEFAULT_MAX_RETRIES = 3
 REQUIRED_FIELDS = (
     "provider",
     "model",
@@ -254,7 +255,10 @@ def embed_chunks(
     """Embed every chunk, returning float32 vectors in chunk order.
 
     ``client`` is any object exposing ``embeddings.create(...)`` with the OpenAI
-    SDK's shape, which keeps the network out of the tests.
+    SDK's shape, which keeps the network out of the tests. The request parameters
+    come from the gateway module: ``dimensions`` is sent only when the config asks
+    for it, and the length that comes back is checked below either way, so a model
+    that ignores the parameter is caught rather than trusted.
     """
     if len(token_counts) != len(chunks):
         raise ValueError("token_counts must have one entry per chunk")
@@ -270,8 +274,7 @@ def embed_chunks(
         response = client.embeddings.create(
             model=config.model,
             input=[chunks[position].text for position in batch],
-            dimensions=config.dimensions,
-            encoding_format="float",
+            **embed_kwargs(config),
         )
         if len(response.data) != len(batch):
             raise ValueError(
@@ -366,14 +369,8 @@ def make_tokenizer(config: EmbeddingConfig):
 
 
 def make_client(config: EmbeddingConfig):
-    """OpenAI client for the configured provider."""
-    from openai import OpenAI
-
-    return OpenAI(
-        api_key=api_key(),
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-        max_retries=DEFAULT_MAX_RETRIES,
-    )
+    """The embedding client for the configured gateway; the key comes from .env."""
+    return gateway.make_embed_client(config)
 
 
 def run(

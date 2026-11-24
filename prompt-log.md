@@ -4,6 +4,49 @@ The prompt sent to each sub-agent, per task. Newest task first. Nothing is
 paraphrased: an entry is the prompt as sent, followed by what came back that the
 plan did not anticipate.
 
+## Task 3, Steps 1–4 — ai-ml-engineer — 2026-11-24
+
+You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.
+
+Implement **Task 3, Steps 1 to 4 only** ("The embedder moves to the gateway") from the plan at `docs/superpowers/plans/2026-11-24-gateway-provider.md`. Read that plan file first, and the design spec at `docs/superpowers/specs/2026-11-24-gateway-provider-design.md`.
+
+Tasks 1 and 2 are already committed. `backend/scripts/gateway.py` exists with `api_key`, `make_chat_client`, `make_embed_client`, `chat_kwargs` and `embed_kwargs`. Both TOML files already name the gateway and pin `local-embedding-model` at 1024 dimensions with `send_dimensions = false`. Do not redo any of it.
+
+**Do NOT run Step 5 (the re-index) or Step 6 (the retrieve check).** There is no gateway key in `.env` yet, so those two commands would fail on the key and not on the code. The parent agent runs them once the key is in place.
+
+So your deliverable is Steps 1 to 4: a new test in `backend/tests/test_embed_chunks.py` proving the embed request sends no `dimensions` unless the config asks, and proving it does send them when it asks; then `embed_chunks.embed_chunks` and `retrieve.embed_query` sending `**embed_kwargs(config)`, and `embed_chunks.make_client` delegating to `gateway.make_embed_client`.
+
+Rules you must not break:
+- Add new tests only. Do not edit an existing test's assertion. The shipped-config pin test was already re-pinned in Task 1, so leave it alone.
+- Do not commit, do not push, do not checkout or create a branch. Leave your work in the working tree; the parent agent commits it.
+- Do not print, log or echo the contents of `.env` or any API key value.
+- `embed_chunks.embed_chunks(config, chunks, token_counts, client, ...)` and `retrieve.embed_query(query, config, client, tokenizer=None)` must keep their names and signatures, because `backend/tests/` patches and calls them.
+- The per-vector length check inside `embed_chunks` must stay exactly as it is: a model that ignores the parameter must be caught, not trusted.
+- `backend/scripts/gateway.py` must not import `embed_chunks`.
+- `embed_chunks` must keep re-exporting `DEFAULT_ENV_FILE`, `load_env_file` and `api_key`, because `backend/app/auth/config.py` imports them from there.
+
+Verify with both of these, and report their exact output:
+1. `venv\Scripts\python.exe -m pytest backend/tests/test_embed_chunks.py backend/tests/test_retrieve.py backend/tests/test_retrieve_hybrid.py -v`
+2. `venv\Scripts\python.exe -m pytest backend/tests/ -q`
+
+In your reply report: the exact test counts from both runs, every file you modified with its path, and anything the plan told you to do that did not work or that you had to do differently.
+
+### What the reply changed, and the defect it found
+
+1. The plan's test snippet assumed helpers `test_embed_chunks.py` does not have,
+   so the two tests were adapted to that file's existing `write_config` +
+   `load_config` style. The same two behaviours are asserted.
+2. The now-orphaned `DEFAULT_TIMEOUT_SECONDS` and `DEFAULT_MAX_RETRIES` were
+   removed from `embed_chunks.py`; nothing referenced them after `make_client`
+   delegated to the gateway.
+3. **A real defect, unrelated to this branch:**
+   `route_token._b64decode` does not reject non-canonical padding bits, so
+   tampering with a token's last base64url character decodes to the same bytes for
+   about one key in four. That makes
+   `test_route_token.py::test_the_token_never_reaches_a_log_record` pass by luck,
+   and it is token malleability in a security check. Left untouched here; it needs
+   its own task.
+
 ## Task 2 — ai-ml-engineer — 2026-11-24
 
 You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.
