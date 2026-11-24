@@ -42,6 +42,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any, Callable, Sequence
 
 import gateway
@@ -547,32 +548,58 @@ def select_citations(
     return chosen or citations
 
 
+def usage_counts(response) -> object | None:
+    """One call's token usage in the shape ``estimate_cost`` reads.
+
+    LangChain reports a reply's usage as input and output tokens; the cost log reads
+    prompt and completion tokens, so the names are mapped here and ``estimate_cost``
+    itself is unchanged.
+    """
+    metadata = getattr(response, "usage_metadata", None) or {}
+    if not metadata:
+        return None
+    return SimpleNamespace(
+        prompt_tokens=metadata.get("input_tokens"),
+        completion_tokens=metadata.get("output_tokens"),
+    )
+
+
 def ask_model(
     config: ChatConfig, client, messages: list[dict]
 ) -> tuple[str | None, object | None]:
     """Call the chat model once; returns its text and usage.
 
-    The JSON mode and the thinking mode come from the gateway module, so the citation
-    contract's strict parse is the guard and not the schema. The SDK's own timeout and
+    The call is made through the LangChain chat model the gateway builds, with the same
+    request the SDK call made: the pinned model, the configured temperature and output
+    limit, and the JSON mode and thinking mode from the gateway module, so the citation
+    contract's strict parse is the guard and not the schema. The client's own timeout and
     retry settings have already been applied when this raises. The message names the model
     and the error type only: neither the prompt nor the API key is ever logged.
     """
+    # LangChain takes a structured-output path whenever the request carries a
+    # response_format, and that path raises on a reply cut off at the output limit
+    # instead of returning the truncated text parse_model_answer rejects and the
+    # fallback replaces. The JSON mode therefore travels in the request's extra_body,
+    # which the SDK merges into the body: the model receives the same request, and a
+    # cut-off reply is a reply again.
+    request = gateway.chat_kwargs(config)
+    body = {**request.pop("extra_body", {}), **request}
     try:
-        response = client.chat.completions.create(
+        response = client.invoke(
+            messages,
             model=config.model,
-            messages=messages,
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
-            **gateway.chat_kwargs(config),
+            extra_body=body,
         )
     except Exception as exc:  # network, timeout, rate limit, provider error
         raise ModelUnavailable(
             f"the chat model {config.model} failed: {type(exc).__name__}"
         ) from exc
 
-    if not response.choices:
-        raise ModelUnavailable(f"the chat model {config.model} returned no choice")
-    return response.choices[0].message.content, getattr(response, "usage", None)
+    # A reply with no text is not repaired here: parse_model_answer rejects it and the
+    # caller falls back, which is what the SDK path did when content was None.
+    return getattr(response, "content", None), usage_counts(response)
 
 
 def estimate_cost(usage, config: ChatConfig) -> float | None:

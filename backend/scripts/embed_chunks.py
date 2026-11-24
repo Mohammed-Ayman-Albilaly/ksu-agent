@@ -254,11 +254,11 @@ def embed_chunks(
 ) -> np.ndarray:
     """Embed every chunk, returning float32 vectors in chunk order.
 
-    ``client`` is any object exposing ``embeddings.create(...)`` with the OpenAI
-    SDK's shape, which keeps the network out of the tests. The request parameters
-    come from the gateway module: ``dimensions`` is sent only when the config asks
-    for it, and the length that comes back is checked below either way, so a model
-    that ignores the parameter is caught rather than trusted.
+    ``client`` is any object exposing ``embed_documents(...)`` with LangChain's shape,
+    which keeps the network out of the tests. The request parameters come from the gateway
+    module: ``dimensions`` is sent only when the config asks for it, and the length that
+    comes back is checked below either way, so a model that ignores the parameter is caught
+    rather than trusted.
     """
     if len(token_counts) != len(chunks):
         raise ValueError("token_counts must have one entry per chunk")
@@ -271,33 +271,23 @@ def embed_chunks(
     )
 
     for batch in batches:
-        response = client.embeddings.create(
-            model=config.model,
-            input=[chunks[position].text for position in batch],
-            **embed_kwargs(config),
+        embedded = client.embed_documents(
+            [chunks[position].text for position in batch], **embed_kwargs(config)
         )
-        if len(response.data) != len(batch):
+        if len(embedded) != len(batch):
             raise ValueError(
-                f"{config.model} returned {len(response.data)} vectors for "
+                f"{config.model} returned {len(embedded)} vectors for "
                 f"{len(batch)} inputs"
             )
 
-        seen: set[int] = set()
-        for item in response.data:
-            if item.index in seen or not 0 <= item.index < len(batch):
-                raise ValueError(f"{config.model} returned an unexpected index")
-            seen.add(item.index)
-            position = batch[item.index]
-            vector = np.asarray(item.embedding, dtype=np.float32)
+        for item, position in zip(embedded, batch):
+            vector = np.asarray(item, dtype=np.float32)
             if vector.shape != (config.dimensions,):
                 raise ValueError(
                     f"{config.model} returned {vector.size} dimensions for "
                     f"{chunks[position].label}; config expects {config.dimensions}"
                 )
             vectors[position] = vector
-
-        if len(seen) != len(batch):
-            raise ValueError(f"{config.model} did not return every vector")
 
     return vectors
 

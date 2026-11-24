@@ -37,7 +37,6 @@ import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Callable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -115,13 +114,10 @@ class MeteredClient:
     def __init__(self, client):
         self._client = client
         self.usages: list = []
-        self.chat = SimpleNamespace(
-            completions=SimpleNamespace(create=self._create)
-        )
 
-    def _create(self, **kwargs):
-        response = self._client.chat.completions.create(**kwargs)
-        self.usages.append(getattr(response, "usage", None))
+    def invoke(self, messages, **kwargs):
+        response = self._client.invoke(messages, **kwargs)
+        self.usages.append(answer.usage_counts(response))
         return response
 
     def usages_since(self, position: int) -> list:

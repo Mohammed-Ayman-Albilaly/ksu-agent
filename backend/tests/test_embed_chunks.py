@@ -6,7 +6,6 @@ tokenizer counts words, so every assertion is deterministic.
 
 import hashlib
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -24,20 +23,16 @@ class WordTokenizer:
 
 
 class FakeClient:
-    """Stands in for openai.OpenAI and records the batches it is sent."""
+    """Stands in for the embedding model and records the batches it is sent."""
 
     def __init__(self, dimensions=DIMENSIONS):
         self.dimensions = dimensions
         self.batches = []
-        self.embeddings = self
 
-    def create(self, *, model, input, dimensions=None, encoding_format=None):
-        self.batches.append(list(input))
-        data = [
-            SimpleNamespace(index=index, embedding=_vector(text, self.dimensions))
-            for index, text in enumerate(input)
-        ]
-        return SimpleNamespace(data=data)
+    def embed_documents(self, texts, **kwargs):
+        """The LangChain call shape: one vector per text, in input order."""
+        self.batches.append(list(texts))
+        return [_vector(text, self.dimensions) for text in texts]
 
 
 def _vector(text, dimensions):
@@ -262,9 +257,9 @@ class RecordingEmbeddingClient(FakeClient):
         super().__init__(dimensions=dimensions)
         self.calls = []
 
-    def create(self, **kwargs):
+    def embed_documents(self, texts, **kwargs):
         self.calls.append(dict(kwargs))
-        return super().create(**kwargs)
+        return super().embed_documents(texts, **kwargs)
 
 
 def make_config(tmp_path, **overrides):

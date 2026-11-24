@@ -9,5 +9,8 @@ httpx==0.28.1
 numpy==2.4.4
 # Hosted embedding and chat APIs, see backend/config/embeddings.toml and chat.toml
 openai==2.54.0
+# The transport every model call is made through (backend/scripts/gateway.py)
+langchain-core==1.8.4
+langchain-openai==1.8.5
 pymupdf==2.1
 tiktoken==0.13.0

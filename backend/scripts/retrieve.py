@@ -434,16 +434,9 @@ def embed_query(
                 f"{config.max_input_tokens}"
             )
 
-    response = client.embeddings.create(
-        model=config.model,
-        input=[normalized],
-        **embed_kwargs(config),
+    vector = np.asarray(
+        client.embed_query(normalized, **embed_kwargs(config)), dtype=np.float32
     )
-    if len(response.data) != 1:
-        raise ValueError(
-            f"{config.model} returned {len(response.data)} vectors for 1 input"
-        )
-    vector = np.asarray(response.data[0].embedding, dtype=np.float32)
     if vector.shape != (config.dimensions,):
         raise ValueError(
             f"{config.model} returned {vector.size} dimensions; config expects "

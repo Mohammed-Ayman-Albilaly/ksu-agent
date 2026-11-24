@@ -222,18 +222,14 @@ def client_failing_once(content, error):
     """A fake whose first call (the classifier) raises and whose answer call works."""
     calls = []
 
-    def create(**kwargs):
-        calls.append(kwargs)
+    def invoke(messages, **kwargs):
+        calls.append({"messages": messages, **kwargs})
         if len(calls) == 1:
             raise error
-        message = SimpleNamespace(content=content, refusal=None)
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=message)], usage=None
-        )
+        return SimpleNamespace(content=content, usage_metadata=None)
 
-    completions = SimpleNamespace(create=create)
+    return SimpleNamespace(invoke=invoke), calls
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=completions)), calls
 
 def test_the_classifier_is_not_asked_when_the_regex_matches(api, monkeypatch):
     """The regex is the fast path: a question it knows never costs a model call."""

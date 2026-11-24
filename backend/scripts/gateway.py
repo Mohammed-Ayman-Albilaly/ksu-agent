@@ -5,6 +5,12 @@ swapping the gateway is a change to two TOML files. The key is read from the env
 variable the config names, so the project and a teammate hold different keys without a code
 change, and its value is never logged, printed or returned.
 
+The transport is LangChain: ``make_chat_client`` builds a ``ChatOpenAI`` and
+``make_embed_client`` an ``OpenAIEmbeddings``, so a call is ``invoke``,
+``embed_documents`` or ``embed_query`` rather than a hand-rolled SDK call. LangChain changes
+how a call is made and not what is guaranteed: the guards in the scripts that use this module
+are untouched.
+
 This module must not import ``embed_chunks``: ``embed_chunks`` imports this module, so that
 would be a circular import. ``REPO_ROOT`` comes from ``fetch_sources`` instead.
 """
@@ -69,14 +75,21 @@ def api_key(config=None, env_file: Path = DEFAULT_ENV_FILE) -> str:
 def make_chat_client(
     config, env_file: Path = DEFAULT_ENV_FILE, key: str | None = None
 ):
-    """The chat client for the configured gateway.
+    """The chat model for the configured gateway, as a LangChain chat model.
 
     ``key`` lets a caller that already read the key pass it in, so the key is read
     once and the caller's own seam stays the one that fails on a missing key.
-    """
-    from openai import OpenAI
 
-    return OpenAI(
+    The client is built once and shared (``app/main.get_client``), so only what
+    belongs to the connection is set here: the key, the base URL, the timeout and the
+    retry count. What belongs to one call — the pinned model, the sampling settings
+    and the JSON and thinking modes from ``chat_kwargs`` — is sent with the call, so
+    one shared client serves the answer and the classifier with their own settings.
+    """
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=config.model,
         api_key=key or api_key(config, env_file),
         base_url=config.base_url,
         timeout=config.timeout_seconds,
@@ -87,19 +100,34 @@ def make_chat_client(
 def make_embed_client(
     config, env_file: Path = DEFAULT_ENV_FILE, key: str | None = None
 ):
-    """The embedding client for the configured gateway."""
-    from openai import OpenAI
+    """The embedder for the configured gateway, as a LangChain embedder.
 
-    return OpenAI(
+    ``check_embedding_ctx_length`` is off on purpose: this project's own guard counts
+    every chunk with the configured tokenizer and refuses an over-long one, so the
+    embedder must not quietly split a text and average the pieces. It sends each text
+    whole, as the SDK call did, and the caller checks the vector's length.
+    """
+    from langchain_openai import OpenAIEmbeddings
+
+    return OpenAIEmbeddings(
+        model=config.model,
         api_key=key or api_key(config, env_file),
         base_url=config.base_url,
+        check_embedding_ctx_length=False,
         timeout=DEFAULT_TIMEOUT_SECONDS,
         max_retries=DEFAULT_MAX_RETRIES,
     )
 
 
 def chat_kwargs(config) -> dict:
-    """The JSON mode and thinking mode every chat call sends."""
+    """The JSON mode and thinking mode every chat call sends.
+
+    A caller that must keep a reply cut off at the output limit — the answer, whose
+    strict parse is the guard and whose fallback replaces an unusable reply — sends this
+    dict in the request's ``extra_body``: LangChain raises on that reply when the
+    request carries a top-level ``response_format``, and the SDK merges ``extra_body``
+    into the body, so the model receives the same request either way.
+    """
     kwargs: dict = {"response_format": {"type": config.json_mode}}
     if config.reasoning_effort:
         kwargs["extra_body"] = {"reasoning_effort": config.reasoning_effort}

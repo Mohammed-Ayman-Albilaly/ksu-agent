@@ -8,6 +8,46 @@ plan did not anticipate.
 different thing: this file records only delegation to a sub-agent, so a task's work
 can be traced back to the brief it was given.
 
+## Task 5 — ai-ml-engineer — 2026-11-24
+
+You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.
+
+Implement **Task 5 only** ("LangChain replaces the transport") from the plan at `docs/superpowers/plans/2026-11-24-gateway-provider.md`. Read that plan file first, and the design spec at `docs/superpowers/specs/2026-11-24-gateway-provider-design.md`.
+
+Tasks 1 to 4 are already committed and the suite is at 753 passed. `backend/scripts/gateway.py` owns the provider; `answer.py`, `app/intent.py`, `embed_chunks.py` and `retrieve.py` call through it. The index at `data/processed/index/ref-01.npz` is 75 x 1024 from `local-embedding-model`, and the retrieval eval is recorded at hit@1 0.70, hit@3 0.80, hit@5 0.80 in `docs/eval-baseline.md`.
+
+The goal is that LangChain replaces **how a call is made**, not **what is guaranteed**. Every public function name and signature stays the same. The suite is the proof.
+
+Rules you must not break:
+- Keep every guard exactly as it is: `count_tokens`, `check_input_limits`, `make_batches`, the model/dimension/sha256 checks in `retrieve.load_index`, `parse_model_answer`, `numbers_not_allowed`, `select_citations`, and `estimate_cost`.
+- Keep the public names and signatures of `answer.ask_model`, `answer.make_client`, `embed_chunks.embed_chunks`, `embed_chunks.make_client` and `retrieve.embed_query`.
+- Do not edit any **pre-existing** test's assertion. Two tests were added by this branch in Task 2 and they pin the SDK call shape (`client.calls[0]["response_format"]` and `["extra_body"]`). Under LangChain those kwargs live in the model's construction, not in the call, so those two are the only tests you may re-pin — keep both behaviours asserted (json_object and no thinking), do not delete or weaken them. Everything else in `backend/tests/` must pass untouched.
+- Do not commit, do not push, do not checkout or create a branch. Leave your work in the working tree; the parent agent commits it.
+- Do not print, log or echo the contents of `.env` or any API key value.
+- `backend/scripts/gateway.py` must not import `embed_chunks`.
+- `embed_chunks` must keep re-exporting `DEFAULT_ENV_FILE`, `load_env_file` and `api_key`.
+
+Verify with all of these, and report their exact output:
+1. `venv\Scripts\python.exe -m pytest backend/tests/ -q`
+2. `venv\Scripts\python.exe -m pytest backend/tests/ -q` a second time, so a flake is visible
+3. `venv\Scripts\python.exe eval\run_retrieval_eval.py`
+4. `venv\Scripts\python.exe eval\run_answer_eval.py`
+
+Expected for 3 and 4: no lower than `docs/eval-baseline.md` (retrieval hit@1 0.70, hit@3 0.80, hit@5 0.80; answers citation_presence 8/11, expected_article_cited 8/10).
+
+In your reply report: the exact test counts from both suite runs, the eval numbers, every file you modified with its path, and anything the plan told you to do that did not work or that you had to do differently.
+
+### What the reply changed, and why
+
+1. The plan's Step 4 (`client.invoke(messages)` with no request arguments) breaks more than the two tests it allows. `test_answer.py` asserts `calls[0]["model"]` and `calls[0]["messages"]`, `test_intent.py` asserts `model`, `temperature` and `timeout`, and `test_with_data.py` reads `client.chat.completions.calls[0]`. LangChain merges a call's own kwargs into the request payload, so the request arguments stay with the call: the wire request is the same one the SDK sent, and no pre-existing assertion changed. The fakes gained `invoke` and kept the shape the assertions read.
+2. The JSON mode of the answer call is sent in the request's `extra_body`, which the OpenAI SDK merges into the body, so the model still receives `response_format: {"type": "json_object"}`. LangChain takes a structured-output path whenever the payload carries a `response_format`, and that path raises `LengthFinishReasonError` on a reply cut off at `max_output_tokens`, where the SDK's `create` returned the truncated text and `parse_model_answer` rejected it and the fallback ran. The eval hit it: q9's answer is 656-674 of the 700 tokens, and one run of `run_answer_eval.py` scored 7/11 on that path instead of 8/11. The two tests that Task 2 added are re-pinned to the request's `extra_body`, and both behaviours are still asserted.
+3. `intent._asked_route` keeps the top-level `response_format`: a cut-off routing reply is `regulation` either way (its `_reply_object` rejected the truncated text before), so its Task-2 test is untouched.
+4. `estimate_cost` reads `prompt_tokens`/`completion_tokens`; LangChain reports `input_tokens`/`output_tokens`, so `answer.usage_counts` maps them and `estimate_cost` is unchanged. `eval/run_answer_eval.py`'s `MeteredClient` wraps `invoke` too, which the plan's file list omits.
+5. A reply whose content is `None` is returned as-is rather than raised: `test_unparseable_reply_returns_the_fallback` feeds `None` and expects the fixed fallback.
+6. `test_chat_endpoint.py`'s `client_failing_once` fake had to gain `invoke`; it is the only fake outside the four the plan named.
+7. The plan names `requirements.txt`; the project's file is `backend/requirements.txt`.
+8. `OpenAIEmbeddings` is built with `check_embedding_ctx_length=False`, so a chunk is sent whole, as the SDK call did: this project's own token guard refuses an over-long chunk, and the embedder must not split one and average the pieces.
+
 ## Task 3, Steps 1–4 — ai-ml-engineer — 2026-11-24
 
 You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.

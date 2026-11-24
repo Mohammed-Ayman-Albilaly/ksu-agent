@@ -209,12 +209,12 @@ def _asked_route(message: str, *, client, config) -> str:
     json_object and not a schema, and its thinking mode is on by default, which a routing
     decision that must take a moment cannot afford.
     """
-    response = client.chat.completions.create(
-        model=config.model,
-        messages=[
+    response = client.invoke(
+        [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": message},
         ],
+        model=config.model,
         # Not config.temperature: routing must be the same for the same question.
         temperature=0.0,
         max_tokens=INTENT_MAX_TOKENS,
@@ -230,12 +230,7 @@ def _asked_route(message: str, *, client, config) -> str:
 
 def _content(response) -> str:
     """The reply's text, or a ValueError when there is none."""
-    choices = getattr(response, "choices", None)
-
-    if not choices:
-        raise ValueError("the reply had no choice")
-
-    content = getattr(getattr(choices[0], "message", None), "content", None)
+    content = getattr(response, "content", None)
 
     if not isinstance(content, str):
         raise ValueError("the reply had no text")
