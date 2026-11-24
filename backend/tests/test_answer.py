@@ -227,6 +227,20 @@ def test_system_prompt_asks_for_arabic_and_article_numbers():
     assert "supported" in answer.SYSTEM_PROMPT
 
 
+def test_system_prompt_speaks_the_dialect_and_quotes_the_article_verbatim():
+    """The explanation is Saudi dialect; the article text it quotes stays formal.
+
+    A dialect paraphrase of the regulation would no longer match the article a
+    citation points at, so the two registers are named separately.
+    """
+    assert "باللهجة السعودية" in answer.SYSTEM_PROMPT
+    assert "بالفصحى" in answer.SYSTEM_PROMPT
+    assert "الاقتباس" in answer.SYSTEM_PROMPT
+    # The citation form and the no-invented-article rule survive the style change.
+    assert "المادة 62" in answer.SYSTEM_PROMPT
+    assert "لا تذكر رقم أي مادة" in answer.SYSTEM_PROMPT
+
+
 def test_system_prompt_applies_the_ccis_executive_rule():
     """The executive rules carry the CCIS-specific numbers (e.g. 2,75 to graduate)."""
     assert "قاعدة تنفيذية" in answer.SYSTEM_PROMPT
