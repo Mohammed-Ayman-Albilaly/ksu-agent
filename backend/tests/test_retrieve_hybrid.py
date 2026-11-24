@@ -53,20 +53,16 @@ def make_chunks(texts=ARTICLES):
 
 
 class TableClient:
-    """Stands in for openai.OpenAI, returning the vector the test chose."""
+    """Stands in for the embedding model, returning the vector the test chose."""
 
     def __init__(self, table):
         self.table = table
         self.inputs = []
-        self.embeddings = self
 
-    def create(self, *, model, input, dimensions=None, encoding_format=None):
-        self.inputs.append(list(input))
-        data = [
-            SimpleNamespace(index=index, embedding=self.table[text])
-            for index, text in enumerate(input)
-        ]
-        return SimpleNamespace(data=data)
+    def embed_query(self, text, **kwargs):
+        """The LangChain call shape: one query, one vector."""
+        self.inputs.append([text])
+        return self.table[text]
 
 
 def write_config(path, **overrides):

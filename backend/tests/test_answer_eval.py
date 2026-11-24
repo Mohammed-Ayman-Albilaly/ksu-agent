@@ -30,28 +30,35 @@ GRADUATION_TEXT = "الحد الأدنى للمعدل التراكمي المط�
 
 
 class FakeCompletions:
-    """Stands in for client.chat.completions and records every request."""
+    """Records every request the fake chat model is sent."""
 
     def __init__(self, content=None, error=None):
         self.content = content
         self.error = error
         self.calls = []
 
-    def create(self, **kwargs):
+    def reply(self, **kwargs):
+        """The request's reply: the fixed content, with its usage."""
         self.calls.append(kwargs)
         if self.error is not None:
             raise self.error
-        usage = SimpleNamespace(prompt_tokens=1000, completion_tokens=100)
-        message = SimpleNamespace(content=self.content, refusal=None)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+        return SimpleNamespace(
+            content=self.content,
+            usage_metadata={"input_tokens": 1000, "output_tokens": 100},
+        )
 
 
 class FakeChatClient:
-    """Stands in for openai.OpenAI, exposing only chat.completions."""
+    """Stands in for the chat model and records every request it is sent."""
 
     def __init__(self, content=None, error=None):
         self.completions = FakeCompletions(content, error)
+        # Kept so a test can read the calls at the path the SDK shape had.
         self.chat = SimpleNamespace(completions=self.completions)
+
+    def invoke(self, messages, **kwargs):
+        """The LangChain call shape: the messages are the input, the rest a request."""
+        return self.completions.reply(messages=messages, **kwargs)
 
     @property
     def calls(self):

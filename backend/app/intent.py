@@ -21,6 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
+
+import gateway
+
 from app.tools import REASONING_TOOLS, ToolRequest, detect_reasoning_kind
 
 LOGGER = logging.getLogger(__name__)
@@ -32,8 +35,6 @@ INTENT_TIMEOUT_SECONDS = 3.0
 # {"route": "reason:academic_warning"} is a handful of tokens; the cap only stops a model that
 # decides to explain itself.
 INTENT_MAX_TOKENS = 24
-
-INTENT_FORMAT = {"type": "json_object"}
 
 REGULATION = "regulation"
 REASON_PREFIX = "reason:"
@@ -202,18 +203,25 @@ def route_name(request: ToolRequest, message: str) -> str:
 
 
 def _asked_route(message: str, *, client, config) -> str:
-    """Call the model once and read its route; anything unreadable is a ValueError."""
-    response = client.chat.completions.create(
-        model=config.model,
-        messages=[
+    """Call the model once and read its route; anything unreadable is a ValueError.
+
+    The JSON mode and the thinking mode come from the gateway module: the gateway offers
+    json_object and not a schema, and its thinking mode is on by default, which a routing
+    decision that must take a moment cannot afford. A routing decision cut off at the output
+    limit is `regulation` either way, so this call takes the top-level JSON-mode form and not
+    the answer's ``extra_body`` one.
+    """
+    response = client.invoke(
+        [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": message},
         ],
+        model=config.model,
         # Not config.temperature: routing must be the same for the same question.
         temperature=0.0,
         max_tokens=INTENT_MAX_TOKENS,
         timeout=INTENT_TIMEOUT_SECONDS,
-        response_format=INTENT_FORMAT,
+        **gateway.chat_request(config, truncated_reply_ok=False),
     )
     route = _reply_object(_content(response)).get("route")
 
@@ -224,12 +232,7 @@ def _asked_route(message: str, *, client, config) -> str:
 
 def _content(response) -> str:
     """The reply's text, or a ValueError when there is none."""
-    choices = getattr(response, "choices", None)
-
-    if not choices:
-        raise ValueError("the reply had no choice")
-
-    content = getattr(getattr(choices[0], "message", None), "content", None)
+    content = getattr(response, "content", None)
 
     if not isinstance(content, str):
         raise ValueError("the reply had no text")

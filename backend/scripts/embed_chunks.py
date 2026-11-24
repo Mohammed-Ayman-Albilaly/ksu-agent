@@ -16,9 +16,9 @@ data/processed/index (git-ignored):
                      total tokens and estimated cost
 
 The model, its dimensions, its input limit and its price all come from the
-embedding config; none of them is hard-coded here. The API key is read from
-OPENAI_API_KEY in the repo-root .env (git-ignored, see .env.example) and is
-never written out, logged or committed.
+embedding config; none of them is hard-coded here. The API key is read from the
+environment variable the config names, in the repo-root .env (git-ignored, see
+.env.example), and is never written out, logged or committed.
 
 Usage:
     python backend/scripts/embed_chunks.py --source-id ref-01
@@ -39,15 +39,22 @@ import numpy as np
 
 from fetch_sources import REPO_ROOT, sha256_file
 
+import gateway
+
+# Re-exported from the gateway module: app/auth/config.py, app/route_token.py and the
+# tests import the env helpers from here, so they must stay importable from here.
+# embed_kwargs is re-exported for retrieve.py, which calls the provider the same way.
+from gateway import DEFAULT_ENV_FILE, api_key, embed_kwargs, load_env_file
+
 DEFAULT_CONFIG = REPO_ROOT / "backend" / "config" / "embeddings.toml"
 DEFAULT_CHUNKS_DIR = REPO_ROOT / "data" / "processed" / "chunks"
 DEFAULT_INDEX_DIR = REPO_ROOT / "data" / "processed" / "index"
-DEFAULT_ENV_FILE = REPO_ROOT / ".env"
-ENV_KEY = "OPENAI_API_KEY"
+# The variable name api_key reads when no config names one; kept here because the
+# tests patch the environment through it. It is the gateway's own default, not a second
+# copy of it, so the legacy name lives in one place.
+ENV_KEY = gateway.DEFAULT_ENV_NAME
 VECTOR_KEY = "vectors"
 TOKENS_PER_PRICE_UNIT = 1_000_000
-DEFAULT_TIMEOUT_SECONDS = 60.0
-DEFAULT_MAX_RETRIES = 3
 REQUIRED_FIELDS = (
     "provider",
     "model",
@@ -70,6 +77,9 @@ class EmbeddingConfig:
     tokenizer: str
     batch_size: int
     batch_max_tokens: int
+    base_url: str = ""
+    api_key_env: str = "OPENAI_API_KEY"
+    send_dimensions: bool = False
 
 
 @dataclass(frozen=True)
@@ -135,6 +145,9 @@ def load_config(config_path: Path) -> EmbeddingConfig:
         tokenizer=str(section["tokenizer"]).strip(),
         batch_size=int(section.get("batch_size", 64)),
         batch_max_tokens=int(section.get("batch_max_tokens", 200_000)),
+        base_url=str(section.get("base_url", "")).strip(),
+        api_key_env=str(section.get("api_key_env", "OPENAI_API_KEY")).strip(),
+        send_dimensions=bool(section.get("send_dimensions", False)),
     )
 
     if not config.provider or not config.model or not config.tokenizer:
@@ -147,6 +160,12 @@ def load_config(config_path: Path) -> EmbeddingConfig:
         raise ValueError(f"{config_path}: price_per_1m_tokens must not be negative")
     if config.batch_size < 1 or config.batch_max_tokens < 1:
         raise ValueError(f"{config_path}: batch limits must be at least 1")
+    # Only the gateway needs a base URL: the default provider's URL is the SDK's own. A
+    # config that names another provider is not required to carry one.
+    if config.provider == "gateway" and not config.base_url:
+        raise ValueError(
+            f"{config_path}: base_url is required when provider is gateway"
+        )
 
     return config
 
@@ -242,8 +261,16 @@ def embed_chunks(
 ) -> np.ndarray:
     """Embed every chunk, returning float32 vectors in chunk order.
 
-    ``client`` is any object exposing ``embeddings.create(...)`` with the OpenAI
-    SDK's shape, which keeps the network out of the tests.
+    ``client`` is any object exposing ``embed_documents(...)`` with LangChain's shape,
+    which keeps the network out of the tests. The request parameters come from the gateway
+    module: ``dimensions`` is sent only when the config asks for it, and the length that
+    comes back is checked below either way, so a model that ignores the parameter is caught
+    rather than trusted.
+
+    One risk is accepted here: ``embed_documents`` returns its vectors in input order and
+    exposes no indices, so a gateway that returned them out of order, or repeated one index,
+    would attach the wrong vector to a chunk undetectably, because the checks below catch only
+    the count and the shape.
     """
     if len(token_counts) != len(chunks):
         raise ValueError("token_counts must have one entry per chunk")
@@ -256,34 +283,23 @@ def embed_chunks(
     )
 
     for batch in batches:
-        response = client.embeddings.create(
-            model=config.model,
-            input=[chunks[position].text for position in batch],
-            dimensions=config.dimensions,
-            encoding_format="float",
+        embedded = client.embed_documents(
+            [chunks[position].text for position in batch], **embed_kwargs(config)
         )
-        if len(response.data) != len(batch):
+        if len(embedded) != len(batch):
             raise ValueError(
-                f"{config.model} returned {len(response.data)} vectors for "
+                f"{config.model} returned {len(embedded)} vectors for "
                 f"{len(batch)} inputs"
             )
 
-        seen: set[int] = set()
-        for item in response.data:
-            if item.index in seen or not 0 <= item.index < len(batch):
-                raise ValueError(f"{config.model} returned an unexpected index")
-            seen.add(item.index)
-            position = batch[item.index]
-            vector = np.asarray(item.embedding, dtype=np.float32)
+        for item, position in zip(embedded, batch):
+            vector = np.asarray(item, dtype=np.float32)
             if vector.shape != (config.dimensions,):
                 raise ValueError(
                     f"{config.model} returned {vector.size} dimensions for "
                     f"{chunks[position].label}; config expects {config.dimensions}"
                 )
             vectors[position] = vector
-
-        if len(seen) != len(batch):
-            raise ValueError(f"{config.model} did not return every vector")
 
     return vectors
 
@@ -342,41 +358,6 @@ def write_index(vectors: np.ndarray, metadata: dict, out_dir: Path) -> tuple[Pat
     return npz_path, meta_path
 
 
-def load_env_file(env_path: Path) -> dict[str, str]:
-    """Read simple KEY=VALUE lines from ``env_path``; empty when absent."""
-    env_path = Path(env_path)
-    if not env_path.exists():
-        return {}
-
-    values: dict[str, str] = {}
-    for line in env_path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, _, value = line.partition("=")
-        name = name.strip()
-        if name.startswith("export "):
-            name = name[len("export ") :].strip()
-        values[name] = value.strip().strip('"').strip("'")
-    return values
-
-
-def api_key(env_file: Path = DEFAULT_ENV_FILE) -> str:
-    """OPENAI_API_KEY from .env, else from the environment.
-
-    The value is never returned to a log or an error message.
-    """
-    key = load_env_file(env_file).get(ENV_KEY, "").strip()
-    if not key:
-        key = os.environ.get(ENV_KEY, "").strip()
-    if not key:
-        raise RuntimeError(
-            f"{ENV_KEY} is not set; add it to {Path(env_file).name} "
-            f"(git-ignored, see .env.example) or export it"
-        )
-    return key
-
-
 def make_tokenizer(config: EmbeddingConfig):
     """The tokenizer named in the config."""
     import tiktoken
@@ -390,14 +371,8 @@ def make_tokenizer(config: EmbeddingConfig):
 
 
 def make_client(config: EmbeddingConfig):
-    """OpenAI client for the configured provider."""
-    from openai import OpenAI
-
-    return OpenAI(
-        api_key=api_key(),
-        timeout=DEFAULT_TIMEOUT_SECONDS,
-        max_retries=DEFAULT_MAX_RETRIES,
-    )
+    """The embedding client for the configured gateway; the key comes from .env."""
+    return gateway.make_embed_client(config)
 
 
 def run(

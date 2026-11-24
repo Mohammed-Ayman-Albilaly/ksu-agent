@@ -20,29 +20,36 @@ ABSENCE_TEXT = "يعد الطالب محروما إذا تجاوزت نسبة غ
 
 
 class FakeCompletions:
-    """Stands in for client.chat.completions and records every request."""
+    """Records every request the fake chat model is sent."""
 
     def __init__(self, content=None, error=None):
         self.contents = list(content) if isinstance(content, list) else [content]
         self.error = error
         self.calls = []
 
-    def create(self, **kwargs):
+    def reply(self, **kwargs):
+        """The request's reply: the next content, with its usage."""
         self.calls.append(kwargs)
         if self.error is not None:
             raise self.error
         content = self.contents.pop(0) if len(self.contents) > 1 else self.contents[0]
-        usage = SimpleNamespace(prompt_tokens=1200, completion_tokens=80)
-        message = SimpleNamespace(content=content, refusal=None)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+        return SimpleNamespace(
+            content=content,
+            usage_metadata={"input_tokens": 1200, "output_tokens": 80},
+        )
 
 
 class FakeChatClient:
-    """Stands in for openai.OpenAI, exposing only chat.completions."""
+    """Stands in for the chat model and records every request it is sent."""
 
     def __init__(self, content=None, error=None):
         self.completions = FakeCompletions(content, error)
+        # Kept so a test can read the calls at the path the SDK shape had.
         self.chat = SimpleNamespace(completions=self.completions)
+
+    def invoke(self, messages, **kwargs):
+        """The LangChain call shape: the messages are the input, the rest a request."""
+        return self.completions.reply(messages=messages, **kwargs)
 
     @property
     def calls(self):
@@ -394,13 +401,60 @@ def test_question_at_the_limit_is_accepted(tmp_path):
     assert result.used_fallback is False
 
 
+# --- the request the model is sent ----------------------------------------
+
+
+def test_the_answer_model_is_asked_for_a_json_object_not_a_schema(tmp_path):
+    """The gateway does not offer json_schema, so the request must not send one.
+
+    The strict parse in parse_model_answer is the guard, not the schema: a reply that is
+    not the answer object still falls back. The JSON mode travels in the request's
+    extra_body, which the SDK merges into the body, so a reply cut off at the output limit
+    is returned to that parse rather than raised by the client.
+    """
+    client = FakeChatClient(reply(True, "المادة 25."))
+    config = answer.load_config(write_config(tmp_path / "chat.toml"))
+
+    answer.ask_model(config, client, [{"role": "user", "content": "سؤال"}])
+
+    body = client.calls[0]["extra_body"]
+    assert body["response_format"] == {"type": "json_object"}
+    assert "json_schema" not in body["response_format"]
+    # The fallback depends on this: a top-level response_format would send a reply cut
+    # off at the output limit through LangChain's parse path, which raises instead of
+    # returning the text parse_model_answer rejects.
+    assert "response_format" not in client.calls[0]
+
+
+def test_the_answer_model_is_asked_not_to_think(tmp_path):
+    """Thinking is on by default on the gateway and would break the latency target."""
+    client = FakeChatClient(reply(True, "المادة 25."))
+    config = answer.load_config(
+        write_config(tmp_path / "chat.toml", reasoning_effort="none")
+    )
+
+    answer.ask_model(config, client, [{"role": "user", "content": "سؤال"}])
+
+    assert client.calls[0]["extra_body"]["reasoning_effort"] == "none"
+
+
 # --- config and cost ------------------------------------------------------
 
 
 def test_the_tracked_config_pins_the_documented_model_settings():
+    """The shipped config, pinned: the gateway, its model and its JSON mode.
+
+    The model id is pinned rather than the gateway's PRIMARY_MODEL alias, because an
+    alias can be repointed at a different model without a change to this repository.
+    """
     config = answer.load_config(answer.DEFAULT_CONFIG)
 
-    assert config.model == "gpt-4o-mini"
+    assert config.provider == "gateway"
+    assert config.base_url == "https://ai-gateway.seai-x.com/inference/v1"
+    assert config.model == "DeepSeek-V4.1-Flash"
+    assert config.api_key_env == "LLM_API_KEY"
+    assert config.json_mode == "json_object"
+    assert config.reasoning_effort == "none"
     assert config.temperature == 0.0
     assert config.max_output_tokens == 700
     assert config.price_per_1m_input > 0

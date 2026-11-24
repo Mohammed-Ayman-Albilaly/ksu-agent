@@ -8,7 +8,6 @@ makes the perfect-match test fail if the normalisation is removed.
 
 import hashlib
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -54,21 +53,17 @@ def _bag_vector(text, dimensions):
 
 
 class FakeClient:
-    """Stands in for openai.OpenAI and records the inputs it is sent."""
+    """Stands in for the embedding model and records the inputs it is sent."""
 
     def __init__(self, dimensions=DIMENSIONS, embed=None):
         self.dimensions = dimensions
         self.embed = embed or _hash_vector
         self.inputs = []
-        self.embeddings = self
 
-    def create(self, *, model, input, dimensions=None, encoding_format=None):
-        self.inputs.append(list(input))
-        data = [
-            SimpleNamespace(index=index, embedding=self.embed(text, self.dimensions))
-            for index, text in enumerate(input)
-        ]
-        return SimpleNamespace(data=data)
+    def embed_query(self, text, **kwargs):
+        """The LangChain call shape: one query, one vector."""
+        self.inputs.append([text])
+        return self.embed(text, self.dimensions)
 
 
 def write_config(path, **overrides):

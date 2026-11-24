@@ -6,7 +6,6 @@ tokenizer counts words, so every assertion is deterministic.
 
 import hashlib
 import json
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -24,20 +23,16 @@ class WordTokenizer:
 
 
 class FakeClient:
-    """Stands in for openai.OpenAI and records the batches it is sent."""
+    """Stands in for the embedding model and records the batches it is sent."""
 
     def __init__(self, dimensions=DIMENSIONS):
         self.dimensions = dimensions
         self.batches = []
-        self.embeddings = self
 
-    def create(self, *, model, input, dimensions=None, encoding_format=None):
-        self.batches.append(list(input))
-        data = [
-            SimpleNamespace(index=index, embedding=_vector(text, self.dimensions))
-            for index, text in enumerate(input)
-        ]
-        return SimpleNamespace(data=data)
+    def embed_documents(self, texts, **kwargs):
+        """The LangChain call shape: one vector per text, in input order."""
+        self.batches.append(list(texts))
+        return [_vector(text, self.dimensions) for text in texts]
 
 
 def _vector(text, dimensions):
@@ -206,13 +201,39 @@ def test_vectors_of_wrong_dimensions_are_rejected(tmp_path):
 
 
 def test_shipped_config_pins_the_embedding_model():
+    """The shipped config, pinned: the gateway's embedder, its length and its limits.
+
+    `send_dimensions` is pinned false because the gateway model may reject a
+    parameter it does not know, and the returned length is validated anyway.
+    """
     config = embed_chunks.load_config(embed_chunks.DEFAULT_CONFIG)
 
-    assert config.provider == "openai"
-    assert config.model == "text-embedding-3-small"
-    assert config.dimensions == 1536
-    assert config.max_input_tokens == 8191
-    assert config.price_per_1m_tokens == 0.02
+    assert config.provider == "gateway"
+    assert config.base_url == "https://ai-gateway.seai-x.com/inference/v1"
+    assert config.model == "local-embedding-model"
+    assert config.api_key_env == "LLM_API_KEY"
+    assert config.dimensions == 1024
+    assert config.max_input_tokens == 8192
+    assert config.price_per_1m_tokens == 0.0
+    assert config.send_dimensions is False
+
+
+def test_a_gateway_config_without_a_base_url_is_rejected(tmp_path):
+    """The chat config refuses one, and an empty base URL would embed nowhere.
+
+    Scoped to the gateway: the default provider's URL is the SDK's own, so a config
+    that names another provider is not required to carry one.
+    """
+    path = write_config(tmp_path / "embeddings.toml", provider="gateway")
+
+    with pytest.raises(ValueError, match="base_url"):
+        embed_chunks.load_config(path)
+
+
+def test_a_provider_other_than_the_gateway_needs_no_base_url(tmp_path):
+    path = write_config(tmp_path / "embeddings.toml")
+
+    assert embed_chunks.load_config(path).base_url == ""
 
 
 def test_api_key_is_read_from_env_file(tmp_path, monkeypatch):
@@ -242,3 +263,50 @@ def test_missing_chunk_file_points_at_chunk_source(tmp_path):
             client=FakeClient(),
             tokenizer=WordTokenizer(),
         )
+
+
+# --- the request parameters ------------------------------------------------
+
+
+class RecordingEmbeddingClient(FakeClient):
+    """A fake that records each request's parameters, not only its inputs."""
+
+    def __init__(self, dimensions=DIMENSIONS):
+        super().__init__(dimensions=dimensions)
+        self.calls = []
+
+    def embed_documents(self, texts, **kwargs):
+        self.calls.append(dict(kwargs))
+        return super().embed_documents(texts, **kwargs)
+
+
+def make_config(tmp_path, **overrides):
+    """The embedding config as the scripts load it: written to TOML, then read back."""
+    path = write_config(tmp_path / "embeddings.toml", **overrides)
+    return embed_chunks.load_config(path)
+
+
+def test_the_embed_request_sends_no_dimensions_unless_the_config_asks(tmp_path):
+    """A model that does not know the parameter may reject the whole request."""
+    config = make_config(tmp_path)
+    client = RecordingEmbeddingClient(dimensions=config.dimensions)
+    chunks = [
+        embed_chunks.Chunk(index=0, article_number=1, heading="المادة 1", text="نص")
+    ]
+
+    embed_chunks.embed_chunks(config, chunks, [3], client)
+
+    assert "dimensions" not in client.calls[0]
+    assert client.calls[0]["encoding_format"] == "float"
+
+
+def test_the_embed_request_sends_the_dimensions_when_the_config_asks(tmp_path):
+    config = make_config(tmp_path, send_dimensions=True)
+    client = RecordingEmbeddingClient(dimensions=config.dimensions)
+    chunks = [
+        embed_chunks.Chunk(index=0, article_number=1, heading="المادة 1", text="نص")
+    ]
+
+    embed_chunks.embed_chunks(config, chunks, [3], client)
+
+    assert client.calls[0]["dimensions"] == config.dimensions

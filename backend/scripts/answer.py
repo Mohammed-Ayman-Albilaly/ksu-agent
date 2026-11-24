@@ -24,7 +24,7 @@ answers (planning the week) still goes to the model.
 The model, temperature, output limit and prices come from
 backend/config/chat.toml. The thresholds the facts are computed against, and the fixed
 queries run per reasoning kind, come from backend/config/reasoning.toml. The API key is
-read from OPENAI_API_KEY in the repo-root
+read from the environment variable chat.toml names, in the repo-root
 .env (see .env.example) and is never logged, printed or returned.
 
 Usage:
@@ -42,10 +42,12 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any, Callable, Sequence
 
-from embed_chunks import api_key
+import gateway
 from fetch_sources import REPO_ROOT, load_sources
+from gateway import api_key
 from retrieve import DEFAULT_K, SearchResult, make_searcher
 
 LOGGER = logging.getLogger(__name__)
@@ -169,33 +171,6 @@ USER_PROMPT_TEMPLATE = """السؤال:
 المواد المسترجعة (لا تستخدم غيرها):
 {articles}"""
 
-# Strict JSON schema: the answer is parsed, never scraped out of prose, so a
-# malformed reply falls back instead of reaching the student.
-ANSWER_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "regulation_answer",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "supported": {
-                    "type": "boolean",
-                    "description": "true only when the retrieved articles answer "
-                    "the question",
-                },
-                "answer": {
-                    "type": "string",
-                    "description": "Arabic answer citing article numbers; empty "
-                    "when supported is false",
-                },
-            },
-            "required": ["supported", "answer"],
-            "additionalProperties": False,
-        },
-    },
-}
-
 _ARTICLE_REFERENCE = re.compile(r"المادة\s*(?:رقم\s*)?([0-9\u0660-\u0669]+)")
 _ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
 _CODE_FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
@@ -225,6 +200,10 @@ class ChatConfig:
     source_id: str
     timeout_seconds: float = 60.0
     max_retries: int = 3
+    base_url: str = ""
+    api_key_env: str = "OPENAI_API_KEY"
+    json_mode: str = "json_object"
+    reasoning_effort: str = ""
 
 
 @dataclass(frozen=True)
@@ -285,6 +264,10 @@ def load_config(config_path: Path = DEFAULT_CONFIG) -> ChatConfig:
         source_id=str(section["source_id"]).strip(),
         timeout_seconds=float(section.get("timeout_seconds", 60.0)),
         max_retries=int(section.get("max_retries", 3)),
+        base_url=str(section.get("base_url", "")).strip(),
+        api_key_env=str(section.get("api_key_env", "OPENAI_API_KEY")).strip(),
+        json_mode=str(section.get("json_mode", "json_object")).strip(),
+        reasoning_effort=str(section.get("reasoning_effort", "")).strip(),
     )
 
     if not config.provider or not config.model or not config.source_id:
@@ -299,6 +282,14 @@ def load_config(config_path: Path = DEFAULT_CONFIG) -> ChatConfig:
         raise ValueError(f"{config_path}: prices must not be negative")
     if config.timeout_seconds <= 0 or config.max_retries < 0:
         raise ValueError(f"{config_path}: timeout and retries must be positive")
+    # Only the gateway needs a base URL: the default provider's URL is the SDK's own. A
+    # config that names another provider is not required to carry one.
+    if config.provider == "gateway" and not config.base_url:
+        raise ValueError(
+            f"{config_path}: base_url is required when provider is gateway"
+        )
+    if config.json_mode not in {"json_object", "text"}:
+        raise ValueError(f"{config_path}: json_mode must be json_object or text")
 
     return config
 
@@ -312,14 +303,13 @@ def load_source(source_id: str, config_path: Path = DEFAULT_SOURCES) -> SourceRe
 
 
 def make_client(config: ChatConfig):
-    """OpenAI client for the configured provider; the key comes from .env."""
-    from openai import OpenAI
+    """The chat client for the configured gateway; the key comes from .env.
 
-    return OpenAI(
-        api_key=api_key(),
-        timeout=config.timeout_seconds,
-        max_retries=config.max_retries,
-    )
+    The key is read here, so a missing one fails here — naming the variable and
+    never its value — instead of deeper inside the client, and the endpoint answers
+    503 for it. The value read here is the one the client is built with.
+    """
+    return gateway.make_chat_client(config, key=api_key(config))
 
 
 def format_articles(results: Sequence[SearchResult]) -> str:
@@ -558,31 +548,53 @@ def select_citations(
     return chosen or citations
 
 
+def usage_counts(response) -> object | None:
+    """One call's token usage in the shape ``estimate_cost`` reads.
+
+    LangChain reports a reply's usage as input and output tokens; the cost log reads
+    prompt and completion tokens, so the names are mapped here and ``estimate_cost``
+    itself is unchanged.
+    """
+    metadata = getattr(response, "usage_metadata", None) or {}
+    if not metadata:
+        return None
+    return SimpleNamespace(
+        prompt_tokens=metadata.get("input_tokens"),
+        completion_tokens=metadata.get("output_tokens"),
+    )
+
+
 def ask_model(
     config: ChatConfig, client, messages: list[dict]
 ) -> tuple[str | None, object | None]:
     """Call the chat model once; returns its text and usage.
 
-    The SDK's own timeout and retry settings (from the config) have already been
-    applied when this raises. The message names the model and the error type only:
-    neither the prompt nor the API key is ever logged.
+    The call is made through the LangChain chat model the gateway builds, with the same
+    request the SDK call made: the pinned model, the configured temperature and output
+    limit, and the JSON mode and thinking mode the gateway module places, so the citation
+    contract's strict parse is the guard and not the schema. The client's own timeout and
+    retry settings have already been applied when this raises. The message names the model
+    and the error type only: neither the prompt nor the API key is ever logged.
     """
     try:
-        response = client.chat.completions.create(
+        response = client.invoke(
+            messages,
             model=config.model,
-            messages=messages,
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
-            response_format=ANSWER_FORMAT,
+            # An answer must see a reply cut off at the output limit: parse_model_answer
+            # rejects it and the fallback runs. Where the JSON mode travels for that is the
+            # gateway's decision, not this caller's.
+            **gateway.chat_request(config, truncated_reply_ok=True),
         )
     except Exception as exc:  # network, timeout, rate limit, provider error
         raise ModelUnavailable(
             f"the chat model {config.model} failed: {type(exc).__name__}"
         ) from exc
 
-    if not response.choices:
-        raise ModelUnavailable(f"the chat model {config.model} returned no choice")
-    return response.choices[0].message.content, getattr(response, "usage", None)
+    # A reply with no text is not repaired here: parse_model_answer rejects it and the
+    # caller falls back, which is what the SDK path did when content was None.
+    return getattr(response, "content", None), usage_counts(response)
 
 
 def estimate_cost(usage, config: ChatConfig) -> float | None:

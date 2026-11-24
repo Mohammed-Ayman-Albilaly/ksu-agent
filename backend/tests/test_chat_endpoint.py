@@ -222,18 +222,14 @@ def client_failing_once(content, error):
     """A fake whose first call (the classifier) raises and whose answer call works."""
     calls = []
 
-    def create(**kwargs):
-        calls.append(kwargs)
+    def invoke(messages, **kwargs):
+        calls.append({"messages": messages, **kwargs})
         if len(calls) == 1:
             raise error
-        message = SimpleNamespace(content=content, refusal=None)
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=message)], usage=None
-        )
+        return SimpleNamespace(content=content, usage_metadata=None)
 
-    completions = SimpleNamespace(create=create)
+    return SimpleNamespace(invoke=invoke), calls
 
-    return SimpleNamespace(chat=SimpleNamespace(completions=completions)), calls
 
 def test_the_classifier_is_not_asked_when_the_regex_matches(api, monkeypatch):
     """The regex is the fast path: a question it knows never costs a model call."""
@@ -370,7 +366,7 @@ def test_a_missing_api_key_is_a_503_not_a_traceback(api, monkeypatch, caplog):
     """make_client reads the key when it is built, before the try, so it is caught too."""
 
     def no_key(*_args, **_kwargs):
-        raise RuntimeError("OPENAI_API_KEY is not set; add it to .env")
+        raise RuntimeError("LLM_API_KEY is not set; add it to .env")
 
     client, _fake = api(content=reply(True, "x"))
     monkeypatch.setattr(answer, "api_key", no_key)

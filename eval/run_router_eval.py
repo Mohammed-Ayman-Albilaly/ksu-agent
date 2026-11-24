@@ -28,7 +28,7 @@ item is correct when every run's route is one the set accepts: a question that m
 accepted routes is printed as VARIES (accepted) and does not fail, while a move that reaches a route
 the set does not accept is UNSTABLE and fails the run.
 
-This calls the real chat model, so it needs OPENAI_API_KEY and it is not part of pytest.
+This calls the real chat model, so it needs LLM_API_KEY and it is not part of pytest.
 
 Usage:
     python eval/run_router_eval.py [--set PATH ...] [--repeat N]
