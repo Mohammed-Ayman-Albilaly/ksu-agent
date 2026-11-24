@@ -207,7 +207,9 @@ def _asked_route(message: str, *, client, config) -> str:
 
     The JSON mode and the thinking mode come from the gateway module: the gateway offers
     json_object and not a schema, and its thinking mode is on by default, which a routing
-    decision that must take a moment cannot afford.
+    decision that must take a moment cannot afford. A routing decision cut off at the output
+    limit is `regulation` either way, so this call takes the top-level JSON-mode form and not
+    the answer's ``extra_body`` one.
     """
     response = client.invoke(
         [
@@ -219,7 +221,7 @@ def _asked_route(message: str, *, client, config) -> str:
         temperature=0.0,
         max_tokens=INTENT_MAX_TOKENS,
         timeout=INTENT_TIMEOUT_SECONDS,
-        **gateway.chat_kwargs(config),
+        **gateway.chat_request(config, truncated_reply_ok=False),
     )
     route = _reply_object(_content(response)).get("route")
 

@@ -50,8 +50,9 @@ DEFAULT_CONFIG = REPO_ROOT / "backend" / "config" / "embeddings.toml"
 DEFAULT_CHUNKS_DIR = REPO_ROOT / "data" / "processed" / "chunks"
 DEFAULT_INDEX_DIR = REPO_ROOT / "data" / "processed" / "index"
 # The variable name api_key reads when no config names one; kept here because the
-# tests patch the environment through it.
-ENV_KEY = "OPENAI_API_KEY"
+# tests patch the environment through it. It is the gateway's own default, not a second
+# copy of it, so the legacy name lives in one place.
+ENV_KEY = gateway.DEFAULT_ENV_NAME
 VECTOR_KEY = "vectors"
 TOKENS_PER_PRICE_UNIT = 1_000_000
 REQUIRED_FIELDS = (
@@ -159,6 +160,12 @@ def load_config(config_path: Path) -> EmbeddingConfig:
         raise ValueError(f"{config_path}: price_per_1m_tokens must not be negative")
     if config.batch_size < 1 or config.batch_max_tokens < 1:
         raise ValueError(f"{config_path}: batch limits must be at least 1")
+    # Only the gateway needs a base URL: the default provider's URL is the SDK's own. A
+    # config that names another provider is not required to carry one.
+    if config.provider == "gateway" and not config.base_url:
+        raise ValueError(
+            f"{config_path}: base_url is required when provider is gateway"
+        )
 
     return config
 
@@ -259,6 +266,11 @@ def embed_chunks(
     module: ``dimensions`` is sent only when the config asks for it, and the length that
     comes back is checked below either way, so a model that ignores the parameter is caught
     rather than trusted.
+
+    One risk is accepted here: ``embed_documents`` returns its vectors in input order and
+    exposes no indices, so a gateway that returned them out of order, or repeated one index,
+    would attach the wrong vector to a chunk undetectably, because the checks below catch only
+    the count and the shape.
     """
     if len(token_counts) != len(chunks):
         raise ValueError("token_counts must have one entry per chunk")

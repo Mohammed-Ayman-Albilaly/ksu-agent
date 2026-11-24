@@ -218,6 +218,24 @@ def test_shipped_config_pins_the_embedding_model():
     assert config.send_dimensions is False
 
 
+def test_a_gateway_config_without_a_base_url_is_rejected(tmp_path):
+    """The chat config refuses one, and an empty base URL would embed nowhere.
+
+    Scoped to the gateway: the default provider's URL is the SDK's own, so a config
+    that names another provider is not required to carry one.
+    """
+    path = write_config(tmp_path / "embeddings.toml", provider="gateway")
+
+    with pytest.raises(ValueError, match="base_url"):
+        embed_chunks.load_config(path)
+
+
+def test_a_provider_other_than_the_gateway_needs_no_base_url(tmp_path):
+    path = write_config(tmp_path / "embeddings.toml")
+
+    assert embed_chunks.load_config(path).base_url == ""
+
+
 def test_api_key_is_read_from_env_file(tmp_path, monkeypatch):
     monkeypatch.delenv(embed_chunks.ENV_KEY, raising=False)
     env_file = tmp_path / ".env"

@@ -8,6 +8,43 @@ plan did not anticipate.
 different thing: this file records only delegation to a sub-agent, so a task's work
 can be traced back to the brief it was given.
 
+## Task 6, the review fixes — ai-ml-engineer — 2026-11-24
+
+You are working in the repository D:\ksu-agent on branch feat/gateway-provider (Windows, cmd.exe, Python at `venv\Scripts\python.exe`). The branch is at `5e7eb1d` and the suite is 753 passed.
+
+A code review found the issues below. Fix them. Read `backend/scripts/gateway.py`, `backend/scripts/answer.py`, `backend/app/intent.py`, `backend/scripts/embed_chunks.py` and the design spec `docs/superpowers/specs/2026-11-24-gateway-provider-design.md` first.
+
+**Fix 1 — the JSON-mode placement has left the seam.** `answer.ask_model` takes `gateway.chat_kwargs(config)` apart and rebuilds the request, so the decision of *where* `response_format` goes now lives in `answer.py`. Replace `chat_kwargs` with one function in `gateway.py` that returns the finished request kwargs: `chat_request(config, *, truncated_reply_ok: bool) -> dict`.
+
+**Fix 2 — the asymmetry is untested.** In `backend/tests/test_answer.py`, beside the existing `extra_body` assertion in the answer's JSON-mode test, add `assert "response_format" not in client.calls[0]`.
+
+**Fix 3 — `embed_chunks.load_config` has no `base_url` guard.** Mirror the chat guard, scoped to `provider == "gateway"`.
+
+**Fix 4 — docs still name `OPENAI_API_KEY`.** `backend/README.md:57` and `eval/run_router_eval.py:31`. Correct both.
+
+**Fix 5 — a stale comment the branch's own fix outdated.** `.env.example` and this file repeat that an absent `KSU_ROUTE_SECRET` makes a forgery test pass by chance; `2c922cd` made the test deterministic. Rewrite it: the secret matters because tokens must survive a restart.
+
+**Fix 6 — a fake raises a message the real code can no longer produce.** `backend/tests/test_chat_endpoint.py:365-383`. Change the fake's message only.
+
+**Fix 7 — two sources of truth for the legacy variable name.** `ENV_KEY = gateway.DEFAULT_ENV_NAME`.
+
+**Fix 8 — nothing asserts the seam's central claim.** Add one test to `backend/tests/test_gateway.py` that builds a client from a config written to a temp `.env` and asserts the client carries the config's model, base URL and key.
+
+**Fix 9 — record one accepted risk.** In `embed_chunks.embed_chunks`'s docstring, note that `embed_documents` returns vectors in input order and exposes no indices.
+
+**Do not change** `intent`'s routing degradation on a complete reply that hits `INTENT_MAX_TOKENS`: the pre-existing `test_intent.py:168` pins the top-level `response_format`, and moving it would edit that pre-existing assertion.
+
+Rules: do not edit a **pre-existing** test assertion; do not commit or push; never print `.env` or a key; `gateway.py` must not import `embed_chunks`; keep every public name, signature and guard.
+
+Verify with `pytest backend/tests/ -q`, `embed_chunks.py --source-id ref-01`, `run_retrieval_eval.py` and `run_answer_eval.py`, and report the exact output.
+
+### What the fixes landed, and the one that did not
+
+All nine landed: the suite is 756 passed and both evals equal the baseline. One
+was deliberately left: `intent` still degrades to `regulation` when a complete reply
+hits `INTENT_MAX_TOKENS`, because moving its `response_format` into `extra_body`
+would edit the pre-existing `test_intent.py:168`.
+
 ## Task 5 — ai-ml-engineer — 2026-11-24
 
 You are working in the repository D:\ksu-agent on branch feat/gateway-provider. This is Windows, so commands run in cmd.exe. The Python interpreter is `venv\Scripts\python.exe`.
@@ -167,9 +204,10 @@ In your reply report: the exact test counts from both runs, every file you creat
    re-pinned to the gateway and extended to pin `base_url`, `api_key_env`,
    `json_mode`, `reasoning_effort` and `send_dimensions`. That is a pin update,
    not a weakened assertion: the test asserts more than before.
-5. `test_route_token.py` is flaky for a reason unrelated to this branch: an
-   absent `KSU_ROUTE_SECRET` mints a random key per process, and flipping the
-   token's last character decodes to the identical signature for about 6% of keys.
-   The variable is now in `.env.example` and `.env`.
+5. An absent `KSU_ROUTE_SECRET` mints a random key per process, so the route
+   tokens of that process do not survive a restart and a student's consent stops
+   matching the answer it was given for. The variable is now in `.env.example` and
+   `.env`. (The forgery test that looked flaky here is deterministic without it:
+   `2c922cd` made `_b64decode` reject a non-canonical encoding.)
 6. `app/intent.py` sends `json_object` but no `reasoning_effort`, so the
    classifier still thinks. That belongs to Task 2 and the plan did not name it.

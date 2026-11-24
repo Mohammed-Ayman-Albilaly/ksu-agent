@@ -571,26 +571,21 @@ def ask_model(
 
     The call is made through the LangChain chat model the gateway builds, with the same
     request the SDK call made: the pinned model, the configured temperature and output
-    limit, and the JSON mode and thinking mode from the gateway module, so the citation
+    limit, and the JSON mode and thinking mode the gateway module places, so the citation
     contract's strict parse is the guard and not the schema. The client's own timeout and
     retry settings have already been applied when this raises. The message names the model
     and the error type only: neither the prompt nor the API key is ever logged.
     """
-    # LangChain takes a structured-output path whenever the request carries a
-    # response_format, and that path raises on a reply cut off at the output limit
-    # instead of returning the truncated text parse_model_answer rejects and the
-    # fallback replaces. The JSON mode therefore travels in the request's extra_body,
-    # which the SDK merges into the body: the model receives the same request, and a
-    # cut-off reply is a reply again.
-    request = gateway.chat_kwargs(config)
-    body = {**request.pop("extra_body", {}), **request}
     try:
         response = client.invoke(
             messages,
             model=config.model,
             temperature=config.temperature,
             max_tokens=config.max_output_tokens,
-            extra_body=body,
+            # An answer must see a reply cut off at the output limit: parse_model_answer
+            # rejects it and the fallback runs. Where the JSON mode travels for that is the
+            # gateway's decision, not this caller's.
+            **gateway.chat_request(config, truncated_reply_ok=True),
         )
     except Exception as exc:  # network, timeout, rate limit, provider error
         raise ModelUnavailable(

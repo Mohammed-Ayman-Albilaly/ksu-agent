@@ -76,6 +76,23 @@ thin calls into this module. Their names and signatures are unchanged, because
 `test_retrieve_hybrid.py:342`) and a signature change would edit tests rather than
 prove the swap.
 
+### As built — three deviations from the sketch above
+
+1. `chat_kwargs(config)` became `chat_request(config, *, truncated_reply_ok)`. LangChain
+   takes a structured-output path whenever a request carries a top-level
+   `response_format`, and that path raises on a reply cut off at the output limit
+   instead of returning the truncated text the fallback needs. The answer path
+   therefore sends its JSON mode inside `extra_body`, which the SDK merges into the
+   body, while routing keeps the top-level form because a cut-off route is
+   `regulation` either way. The placement is a named parameter of the seam rather
+   than something each caller decides.
+2. `OpenAIEmbeddings` is built with `check_embedding_ctx_length=False`, so a chunk
+   is sent whole as the SDK call sent it rather than being split and averaged.
+3. `embed_documents` returns vectors in input order and exposes no indices, so the
+   duplicate and out-of-range index checks are gone. The count and length checks
+   remain; a gateway that reordered or repeated an index would now attach the wrong
+   vector undetectably. Recorded in `embed_chunks.embed_chunks`'s docstring.
+
 `chat.toml` gains `base_url`, `api_key_env`, `json_mode` and `reasoning_effort`.
 `embeddings.toml` gains `base_url`, `api_key_env`, `send_dimensions` and moves
 `provider` to `gateway`.

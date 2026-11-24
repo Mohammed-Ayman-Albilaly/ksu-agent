@@ -83,7 +83,7 @@ def make_chat_client(
     The client is built once and shared (``app/main.get_client``), so only what
     belongs to the connection is set here: the key, the base URL, the timeout and the
     retry count. What belongs to one call — the pinned model, the sampling settings
-    and the JSON and thinking modes from ``chat_kwargs`` — is sent with the call, so
+    and the JSON and thinking modes from ``chat_request`` — is sent with the call, so
     one shared client serves the answer and the classifier with their own settings.
     """
     from langchain_openai import ChatOpenAI
@@ -119,15 +119,23 @@ def make_embed_client(
     )
 
 
-def chat_kwargs(config) -> dict:
-    """The JSON mode and thinking mode every chat call sends.
+def chat_request(config, *, truncated_reply_ok: bool) -> dict:
+    """The request kwargs for one chat call, the JSON-mode placement included.
 
-    A caller that must keep a reply cut off at the output limit — the answer, whose
-    strict parse is the guard and whose fallback replaces an unusable reply — sends this
-    dict in the request's ``extra_body``: LangChain raises on that reply when the
-    request carries a top-level ``response_format``, and the SDK merges ``extra_body``
-    into the body, so the model receives the same request either way.
+    LangChain takes a structured-output path whenever the request carries a
+    top-level ``response_format``, and that path raises on a reply cut off at the
+    output limit instead of returning the truncated text. An answer needs the
+    truncated text so ``parse_model_answer`` rejects it and the fallback runs, so its
+    JSON mode travels in ``extra_body``, which the SDK merges into the body: the
+    model receives the same request. A routing decision that is cut off is
+    ``regulation`` either way, so it keeps the top-level form.
     """
+    if truncated_reply_ok:
+        body: dict = {"response_format": {"type": config.json_mode}}
+        if config.reasoning_effort:
+            body["reasoning_effort"] = config.reasoning_effort
+        return {"extra_body": body}
+
     kwargs: dict = {"response_format": {"type": config.json_mode}}
     if config.reasoning_effort:
         kwargs["extra_body"] = {"reasoning_effort": config.reasoning_effort}

@@ -57,16 +57,55 @@ def test_an_absent_key_names_the_variable_and_never_its_value(tmp_path):
 
 
 def test_chat_asks_for_json_object_and_no_thinking():
-    kwargs = gateway.chat_kwargs(chat_config())
+    kwargs = gateway.chat_request(chat_config(), truncated_reply_ok=False)
 
     assert kwargs["response_format"] == {"type": "json_object"}
     assert kwargs["extra_body"] == {"reasoning_effort": "none"}
 
 
 def test_chat_omits_the_reasoning_effort_when_none_is_configured():
-    kwargs = gateway.chat_kwargs(chat_config(reasoning_effort=""))
+    kwargs = gateway.chat_request(
+        chat_config(reasoning_effort=""), truncated_reply_ok=False
+    )
 
     assert "extra_body" not in kwargs
+
+
+def test_a_client_carries_the_model_base_url_and_key_the_config_names(tmp_path):
+    """The seam's central claim: the config, not the code, decides where a call goes.
+
+    Both clients are built from the one config ``answer.load_config`` reads out of a TOML
+    written here, and the key is the one ``api_key`` reads out of a .env written here, so
+    nothing about either client is passed by hand.
+    """
+    env_file = tmp_path / ".env"
+    env_file.write_text("LLM_API_KEY=gw-test-value\n", encoding="utf-8")
+    config_path = tmp_path / "chat.toml"
+    config_path.write_text(
+        "[chat]\n"
+        'provider = "gateway"\n'
+        'model = "DeepSeek-V4.1-Flash"\n'
+        "temperature = 0.0\n"
+        "max_output_tokens = 700\n"
+        "price_per_1m_input = 0.30\n"
+        "price_per_1m_output = 1.20\n"
+        'source_id = "ref-01"\n'
+        'base_url = "https://ai-gateway.seai-x.com/inference/v1"\n'
+        'api_key_env = "LLM_API_KEY"\n'
+        'json_mode = "json_object"\n'
+        'reasoning_effort = "none"\n',
+        encoding="utf-8",
+    )
+    config = __import__("answer").load_config(config_path)
+
+    chat = gateway.make_chat_client(config, env_file)
+    assert chat.model_name == config.model
+    assert chat.openai_api_base == config.base_url
+    assert chat.openai_api_key.get_secret_value() == "gw-test-value"
+
+    embedder = gateway.make_embed_client(config, env_file)
+    assert embedder.model == config.model
+    assert embedder.openai_api_base == config.base_url
 
 
 def test_embed_sends_no_dimensions_by_default():

@@ -420,6 +420,10 @@ def test_the_answer_model_is_asked_for_a_json_object_not_a_schema(tmp_path):
     body = client.calls[0]["extra_body"]
     assert body["response_format"] == {"type": "json_object"}
     assert "json_schema" not in body["response_format"]
+    # The fallback depends on this: a top-level response_format would send a reply cut
+    # off at the output limit through LangChain's parse path, which raises instead of
+    # returning the text parse_model_answer rejects.
+    assert "response_format" not in client.calls[0]
 
 
 def test_the_answer_model_is_asked_not_to_think(tmp_path):

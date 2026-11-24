@@ -54,7 +54,7 @@ Retrieves the top 5 chunks with `retrieve.py` and puts **only** those articles â
 article number, heading, URL and text â€” in the prompt, asking the model pinned in
 [`config/chat.toml`](config/chat.toml) for an Arabic answer that cites the article
 numbers. When the retrieved articles do not support an answer, the fixed fallback
-text is returned with no citations. The key is `OPENAI_API_KEY` from `.env`.
+text is returned with no citations. The key is `LLM_API_KEY` from `.env`.
 
 ## HTTP API
 

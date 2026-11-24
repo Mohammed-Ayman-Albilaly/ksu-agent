@@ -366,7 +366,7 @@ def test_a_missing_api_key_is_a_503_not_a_traceback(api, monkeypatch, caplog):
     """make_client reads the key when it is built, before the try, so it is caught too."""
 
     def no_key(*_args, **_kwargs):
-        raise RuntimeError("OPENAI_API_KEY is not set; add it to .env")
+        raise RuntimeError("LLM_API_KEY is not set; add it to .env")
 
     client, _fake = api(content=reply(True, "x"))
     monkeypatch.setattr(answer, "api_key", no_key)
