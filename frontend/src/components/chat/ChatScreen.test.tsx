@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,10 +34,12 @@ vi.mock("@/components/LanguageProvider", () => ({
   }),
 }));
 
-vi.mock("@/lib/api/chat", () => ({
-  sendMessage: vi.fn(),
-  sendWithData: vi.fn(),
-}));
+// The functions are mocked; the module's own constants stay real.
+vi.mock("@/lib/api/chat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/chat")>();
+
+  return { ...actual, sendMessage: vi.fn(), sendWithData: vi.fn() };
+});
 
 vi.mock("@/lib/extension", async () => {
   const actual =
@@ -63,6 +72,36 @@ async function ask() {
     target: { value: QUESTION },
   });
   fireEvent.click(screen.getByRole("button", { name: t.chat.send }));
+}
+
+async function askQuestion(question: string) {
+  // The answer settles inside act, so the next question starts from a settled screen.
+  await act(async () => {
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: question },
+    });
+    fireEvent.click(screen.getByRole("button", { name: t.chat.send }));
+  });
+}
+
+/** A plain answer to one question, as the API would return it. */
+function answerWith(question: string) {
+  return {
+    ok: true as const,
+    kind: "answer" as const,
+    answer: `جواب ${question}`,
+    citations: [],
+    basis: "regulation" as const,
+  };
+}
+
+/** The earlier turns the request at that index carried. */
+function sentHistory(index: number) {
+  const [sent] = (sendMessage as Mock).mock.calls[index] as [
+    { history: { role: string; content: string }[] },
+  ];
+
+  return sent.history;
 }
 
 function storedText(): string {
@@ -215,6 +254,51 @@ describe("a reasoning question", () => {
 
     expect(stored).not.toContain("987654");
     expect(stored).not.toContain("cumulative_gpa");
+  });
+
+  it("sends the last six turns with the question, and never the question being asked", async () => {
+    (sendMessage as Mock).mockImplementation(
+      async ({ message }: { message: string }) => answerWith(message),
+    );
+
+    render(<ChatScreen />);
+
+    for (const question of ["سؤال ١", "سؤال ٢", "سؤال ٣", "سؤال ٤"]) {
+      await askQuestion(question);
+      await screen.findByText(`جواب ${question}`);
+    }
+
+    // The first question had nothing before it; the fourth had the three exchanges before it.
+    expect(sentHistory(0)).toEqual([]);
+    expect(sentHistory(3)).toEqual([
+      { role: "user", content: "سؤال ١" },
+      { role: "assistant", content: "جواب سؤال ١" },
+      { role: "user", content: "سؤال ٢" },
+      { role: "assistant", content: "جواب سؤال ٢" },
+      { role: "user", content: "سؤال ٣" },
+      { role: "assistant", content: "جواب سؤال ٣" },
+    ]);
+  });
+
+  it("leaves out a turn that carries no text", async () => {
+    (sendMessage as Mock).mockResolvedValueOnce({
+      ok: false,
+      error: "server_unavailable",
+    });
+    (sendMessage as Mock).mockImplementation(
+      async ({ message }: { message: string }) => answerWith(message),
+    );
+
+    render(<ChatScreen />);
+
+    await askQuestion("سؤال ١");
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    await askQuestion("سؤال ٢");
+    await screen.findByText("جواب سؤال ٢");
+
+    // The failed answer is a bubble with no text, so only the question travels.
+    expect(sentHistory(1)).toEqual([{ role: "user", content: "سؤال ١" }]);
   });
 
   it("reports the site to open when the extension cannot read a page", async () => {

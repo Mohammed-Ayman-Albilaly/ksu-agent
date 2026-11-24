@@ -6,6 +6,7 @@ codes are what is under test.
 """
 
 import json
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -555,3 +556,151 @@ def test_a_validation_code_does_not_echo_the_question(api):
 
     assert response.json() == {"detail": "message_too_long"}
     assert "س" not in response.text
+
+
+# --- chat memory: the last turns travel with the question, the server keeps none ---
+
+# The classifier answers first for a question the regex does not know, so these use the
+# two-reply fake from test_a_classifier_route_of_regulation_still_gets_an_answer.
+HISTORY = [
+    {"role": "user", "content": "HIST-USER-1"},
+    {"role": "assistant", "content": "HIST-ASSISTANT-1"},
+]
+
+REGULATION_THEN_ANSWER = [
+    json.dumps({"route": "regulation"}),
+    reply(True, "الحد الأدنى 2,75 (المادة 62)."),
+]
+
+
+def test_the_history_reaches_the_prompt_in_order_before_the_question(api):
+    client, fake = api(content=list(REGULATION_THEN_ANSWER))
+
+    response = client.post(
+        "/chat", json={"message": HELD_OUT_TOOL_QUESTION, "history": HISTORY}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["type"] == "answer"
+    messages = fake.calls[-1]["messages"]
+    assert [message["role"] for message in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert messages[1]["content"] == HISTORY[0]["content"]
+    assert messages[2]["content"] == HISTORY[1]["content"]
+    assert HELD_OUT_TOOL_QUESTION in messages[3]["content"]
+
+
+def test_six_turns_are_accepted(api):
+    client, fake = api(content=list(REGULATION_THEN_ANSWER))
+    history = [{"role": "user", "content": f"س-{index}"} for index in range(6)]
+
+    response = client.post(
+        "/chat", json={"message": HELD_OUT_TOOL_QUESTION, "history": history}
+    )
+
+    assert response.status_code == 200
+    assert len(fake.calls[-1]["messages"]) == 1 + 6 + 1
+
+
+def test_a_seven_turn_history_is_history_invalid(api):
+    client, fake = api(content=reply(True, "x"))
+    history = [{"role": "user", "content": f"س-{index}"} for index in range(7)]
+
+    response = client.post(
+        "/chat", json={"message": HELD_OUT_TOOL_QUESTION, "history": history}
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "history_invalid"}
+    assert fake.calls == []
+
+
+def test_a_blank_history_turn_is_history_invalid(api):
+    client, fake = api(content=reply(True, "x"))
+
+    response = client.post(
+        "/chat",
+        json={
+            "message": HELD_OUT_TOOL_QUESTION,
+            "history": [{"role": "user", "content": "  \t\n "}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "history_invalid"}
+    assert fake.calls == []
+
+
+def test_a_history_turn_over_the_limit_is_history_invalid(api):
+    client, fake = api(content=reply(True, "x"))
+
+    response = client.post(
+        "/chat",
+        json={
+            "message": HELD_OUT_TOOL_QUESTION,
+            "history": [
+                {"role": "assistant", "content": "س" * (answer.MAX_QUESTION_CHARS + 1)}
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "history_invalid"}
+    assert fake.calls == []
+
+
+def test_a_role_that_is_not_user_or_assistant_is_history_invalid(api):
+    client, fake = api(content=reply(True, "x"))
+
+    response = client.post(
+        "/chat",
+        json={
+            "message": HELD_OUT_TOOL_QUESTION,
+            "history": [{"role": "system", "content": "أنت مساعد"}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "history_invalid"}
+    assert fake.calls == []
+
+
+def test_a_history_code_does_not_echo_the_content(api):
+    client, _fake = api(content=reply(True, "x"))
+
+    response = client.post(
+        "/chat",
+        json={
+            "message": HELD_OUT_TOOL_QUESTION,
+            "history": [
+                {"role": "user", "content": "HIST-LEAK-" + "س" * answer.MAX_QUESTION_CHARS}
+            ],
+        },
+    )
+
+    assert response.json() == {"detail": "history_invalid"}
+    assert "HIST-LEAK" not in response.text
+
+
+def test_the_history_text_never_reaches_a_log_record(api, caplog):
+    client, _fake = api(content=list(REGULATION_THEN_ANSWER))
+
+    with caplog.at_level("DEBUG"):
+        response = client.post(
+            "/chat", json={"message": HELD_OUT_TOOL_QUESTION, "history": HISTORY}
+        )
+
+    assert response.status_code == 200
+    # Only the number of turns is recorded, never their text.
+    assert "2 earlier turn" in caplog.text
+    assert "HIST-USER-1" not in caplog.text
+    assert "HIST-ASSISTANT-1" not in caplog.text
+    formatted = "\n".join(
+        logging.Formatter().format(record) for record in caplog.records
+    )
+    assert "HIST-USER-1" not in formatted
+    assert "HIST-ASSISTANT-1" not in formatted

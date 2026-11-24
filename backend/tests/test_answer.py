@@ -115,6 +115,7 @@ def run(
     facts=None,
     extra_queries=(),
     needs_regulation=True,
+    history=None,
     **config_overrides,
 ):
     """Call answer_question with fakes; returns the Answer and the fake client."""
@@ -130,6 +131,7 @@ def run(
         facts=facts,
         extra_queries=extra_queries,
         needs_regulation=needs_regulation,
+        history=history,
     )
     return result, client, retriever
 
@@ -606,6 +608,115 @@ def test_another_kind_gets_no_graduation_rule():
     )
 
     assert answer.GRADUATION_RULES not in messages[0]["content"]
+
+
+# --- chat memory: earlier turns are context, never a source of facts ----------
+
+HISTORY = [
+    {"role": "user", "content": "كم الحد الأدنى للمعدل التراكمي؟"},
+    {"role": "assistant", "content": "الحد الأدنى 2,75 من 5,00 (المادة 62)."},
+]
+
+
+def test_history_reaches_the_prompt_in_order_and_before_the_question(tmp_path):
+    """The earlier turns sit between the system prompt and this question, in their own order."""
+    _result, client, _retriever = run(
+        tmp_path,
+        "وأي مادة تنص على ذلك؟",
+        [make_result(62, GRADUATION_TEXT)],
+        reply(True, "المادة 62 تنص على ذلك (المادة 62)."),
+        history=HISTORY,
+    )
+
+    messages = client.calls[0]["messages"]
+
+    assert [message["role"] for message in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert messages[1]["content"] == HISTORY[0]["content"]
+    assert messages[2]["content"] == HISTORY[1]["content"]
+    # The current question comes after the history, with the retrieved articles.
+    assert "وأي مادة تنص على ذلك؟" in messages[3]["content"]
+    assert "2,75" in messages[3]["content"]
+
+
+def test_an_assistant_turn_is_truncated_to_400_characters(tmp_path):
+    """An old long answer must not crowd out the articles retrieved for this question."""
+    long_answer = "س" * 900
+    history = [
+        {"role": "user", "content": "اشرح لي المادة 62"},
+        {"role": "assistant", "content": long_answer},
+    ]
+
+    _result, client, _retriever = run(
+        tmp_path,
+        "وأي مادة تنص على ذلك؟",
+        [make_result(62, GRADUATION_TEXT)],
+        reply(True, "المادة 62 تنص على ذلك (المادة 62)."),
+        history=history,
+    )
+
+    messages = client.calls[0]["messages"]
+
+    assert messages[2]["role"] == "assistant"
+    assert len(messages[2]["content"]) == 400
+    assert messages[2]["content"] == long_answer[:400]
+    # A user turn is the student's own question and is not cut short.
+    assert messages[1]["content"] == "اشرح لي المادة 62"
+
+
+def test_the_prompt_says_history_is_not_a_source_of_facts(tmp_path):
+    messages = answer.build_messages(
+        "وأي مادة تنص على ذلك؟", [ARTICLE_24], history=HISTORY
+    )
+
+    system = messages[0]["content"]
+
+    assert answer.HISTORY_RULES in system
+    # The rule names the hazard it exists for: an earlier answer is not evidence.
+    assert "ليست اللائحة" in answer.HISTORY_RULES
+    assert "ليست مصدرًا" in answer.HISTORY_RULES
+    assert "لهذا السؤال" in answer.HISTORY_RULES
+
+
+def test_no_history_rule_without_history():
+    without = answer.build_messages("كم غيابي؟", [ARTICLE_24])
+    empty = answer.build_messages("كم غيابي؟", [ARTICLE_24], history=[])
+
+    assert answer.HISTORY_RULES not in without[0]["content"]
+    assert answer.HISTORY_RULES not in empty[0]["content"]
+    # Without history the prompt is the one it was: a system message and the question.
+    assert [message["role"] for message in without] == ["system", "user"]
+
+
+def test_a_history_turn_is_an_ordinary_message_and_never_a_data_block(tmp_path):
+    """History is neither the student's records nor the computed facts: it is a conversation."""
+    history = [
+        {"role": "user", "content": "ما معدلي؟"},
+        {"role": "assistant", "content": "معدلك 4,21 (المادة 62)."},
+    ]
+
+    _result, client, _retriever = run(
+        tmp_path,
+        "وهل أنا تحت الإنذار؟",
+        [make_result(62, GRADUATION_TEXT)],
+        reply(True, "المادة 62 تنص على ذلك (المادة 62)."),
+        history=history,
+    )
+
+    messages = client.calls[0]["messages"]
+
+    assert [message["role"] for message in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert "<student_data>" not in messages[1]["content"]
+    assert "<facts>" not in messages[2]["content"]
 
 
 # --- the verdict templates ------------------------------------------------

@@ -100,11 +100,14 @@ def _validation_code(exc: RequestValidationError) -> str:
     a value the student approved for one answer (ADR 0001, rule 2), so both answer paths
     always answer with a code: `data_invalid` for a `data` the contract does not allow,
     `route_invalid` for a `route_token` that does not bind this question to this student,
+    `history_invalid` for an earlier turn that is not one this API accepts, and
     `bad_request` for anything else, such as a body that is not JSON.
     """
     code = _message_validation_code(exc)
     if code is not None:
         return code
+    if any("history" in error.get("loc", ()) for error in exc.errors()):
+        return "history_invalid"
     if any("route_token" in error.get("loc", ()) for error in exc.errors()):
         return "route_invalid"
     if any("data" in error.get("loc", ()) for error in exc.errors()):
@@ -122,6 +125,32 @@ async def _chat_validation_error(request, exc: RequestValidationError):
     return await request_validation_exception_handler(request, exc)
 
 
+# The turns a request may carry: the website sends the last three exchanges (six turns) with
+# each question, and the server keeps none of it (ADR 0001: no session, no history file, no log
+# line carrying the text).
+MAX_HISTORY_TURNS = 6
+
+
+class HistoryTurn(BaseModel):
+    """One earlier turn of the conversation, as the website holds it.
+
+    It is context for the answer and never a source of a fact (answer.HISTORY_RULES): the server
+    only passes it into this question's prompt and stores nothing.
+    """
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=answer.MAX_QUESTION_CHARS)
+
+    @field_validator("content")
+    @classmethod
+    def _content_is_not_blank(cls, value: str) -> str:
+        """A blank turn carries no conversation, so it is refused rather than sent."""
+        content = value.strip()
+        if not content:
+            raise ValueError("history_invalid")
+        return content
+
+
 class ChatRequest(BaseModel):
     """The request body from docs/api-contract.md."""
 
@@ -129,6 +158,11 @@ class ChatRequest(BaseModel):
     # Accepted so a client can keep its conversation id; the endpoint keeps no
     # history yet, so the value is not used.
     session_id: str | None = Field(default=None, max_length=128)
+    # The conversation so far, held by the website and sent with each question. It is
+    # passed into this question's prompt and stored nowhere (ADR 0001).
+    history: list[HistoryTurn] = Field(
+        default_factory=list, max_length=MAX_HISTORY_TURNS
+    )
 
     @field_validator("message")
     @classmethod
@@ -279,6 +313,9 @@ def chat(
             client=client,
             config=config,
             source=get_source(),
+            # The earlier turns are the website's, not the server's: they go into this
+            # question's prompt and are kept nowhere. Only their number is ever logged.
+            history=[turn.model_dump() for turn in request.history],
         )
     except Exception as exc:
         LOGGER.error("chat failed: %s", type(exc).__name__)
@@ -287,9 +324,10 @@ def chat(
             detail="the answer service is unavailable; please try again",
         ) from None
     LOGGER.info(
-        "answered a %d-character question with %d citation(s)",
+        "answered a %d-character question with %d citation(s) and %d earlier turn(s)",
         len(request.message),
         len(result.citations),
+        len(request.history),
     )
     return _answer_response(result)
 
