@@ -5,20 +5,28 @@
 # produced it. Vectors from two different models are never mixed in one index.
 #
 #   provider              vendor whose API generates the vectors
+#   base_url              the gateway's OpenAI-compatible base URL
 #   model                 model id sent with every request
+#   api_key_env           environment variable holding the key; never the key itself
 #   dimensions            vector length; must match the model
 #   max_input_tokens      per-input limit; a longer chunk aborts the run
 #   price_per_1m_tokens   USD per 1,000,000 input tokens, for the cost estimate
 #   tokenizer             tiktoken encoding used to count tokens locally
 #   batch_size            maximum number of chunks per request
 #   batch_max_tokens      maximum tokens per request
+#   send_dimensions       send "dimensions" with each request; opt-in, because a
+#                         model that does not know the parameter may reject it, and
+#                         the returned length is validated either way
 
 [embedding]
-provider = "openai"
-model = "text-embedding-3-small"
-dimensions = 1536
-max_input_tokens = 8191
-price_per_1m_tokens = 0.02
+provider = "gateway"
+base_url = "https://ai-gateway.seai-x.com/inference/v1"
+model = "local-embedding-model"
+api_key_env = "LLM_API_KEY"
+dimensions = 1024
+max_input_tokens = 8192
+price_per_1m_tokens = 0.0
 tokenizer = "cl100k_base"
 batch_size = 64
 batch_max_tokens = 200000
+send_dimensions = false

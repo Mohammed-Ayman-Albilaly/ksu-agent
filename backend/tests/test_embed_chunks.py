@@ -206,13 +206,21 @@ def test_vectors_of_wrong_dimensions_are_rejected(tmp_path):
 
 
 def test_shipped_config_pins_the_embedding_model():
+    """The shipped config, pinned: the gateway's embedder, its length and its limits.
+
+    `send_dimensions` is pinned false because the gateway model may reject a
+    parameter it does not know, and the returned length is validated anyway.
+    """
     config = embed_chunks.load_config(embed_chunks.DEFAULT_CONFIG)
 
-    assert config.provider == "openai"
-    assert config.model == "text-embedding-3-small"
-    assert config.dimensions == 1536
-    assert config.max_input_tokens == 8191
-    assert config.price_per_1m_tokens == 0.02
+    assert config.provider == "gateway"
+    assert config.base_url == "https://ai-gateway.seai-x.com/inference/v1"
+    assert config.model == "local-embedding-model"
+    assert config.api_key_env == "LLM_API_KEY"
+    assert config.dimensions == 1024
+    assert config.max_input_tokens == 8192
+    assert config.price_per_1m_tokens == 0.0
+    assert config.send_dimensions is False
 
 
 def test_api_key_is_read_from_env_file(tmp_path, monkeypatch):

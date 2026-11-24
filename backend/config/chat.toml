@@ -5,7 +5,11 @@
 # an estimated cost per answer.
 #
 #   provider              vendor whose API generates the answer
-#   model                 model id sent with every request
+#   base_url              the gateway's OpenAI-compatible base URL
+#   model                 model id sent with every request; pinned, never an alias
+#   api_key_env           environment variable holding the key; never the key itself
+#   json_mode             response_format type; the gateway offers json_object only
+#   reasoning_effort        "none" switches thinking off; it is on by default there
 #   temperature           sampling temperature; 0 keeps answers as repeatable as
 #                         the provider allows
 #   max_output_tokens     cap on the generated answer, in tokens
@@ -16,12 +20,16 @@
 #   max_retries           retries for transient errors (SDK backoff with jitter)
 
 [chat]
-provider = "openai"
-model = "gpt-4o-mini"
+provider = "gateway"
+base_url = "https://ai-gateway.seai-x.com/inference/v1"
+model = "DeepSeek-V4.1-Flash"
+api_key_env = "LLM_API_KEY"
+json_mode = "json_object"
+reasoning_effort = "none"
 temperature = 0.0
 max_output_tokens = 700
-price_per_1m_input = 0.15
-price_per_1m_output = 0.60
+price_per_1m_input = 0.30
+price_per_1m_output = 1.20
 source_id = "ref-01"
 timeout_seconds = 60
 max_retries = 3

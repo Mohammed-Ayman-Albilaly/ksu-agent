@@ -398,9 +398,19 @@ def test_question_at_the_limit_is_accepted(tmp_path):
 
 
 def test_the_tracked_config_pins_the_documented_model_settings():
+    """The shipped config, pinned: the gateway, its model and its JSON mode.
+
+    The model id is pinned rather than the gateway's PRIMARY_MODEL alias, because an
+    alias can be repointed at a different model without a change to this repository.
+    """
     config = answer.load_config(answer.DEFAULT_CONFIG)
 
-    assert config.model == "gpt-4o-mini"
+    assert config.provider == "gateway"
+    assert config.base_url == "https://ai-gateway.seai-x.com/inference/v1"
+    assert config.model == "DeepSeek-V4.1-Flash"
+    assert config.api_key_env == "LLM_API_KEY"
+    assert config.json_mode == "json_object"
+    assert config.reasoning_effort == "none"
     assert config.temperature == 0.0
     assert config.max_output_tokens == 700
     assert config.price_per_1m_input > 0

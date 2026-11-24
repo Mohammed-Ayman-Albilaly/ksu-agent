@@ -24,7 +24,7 @@ answers (planning the week) still goes to the model.
 The model, temperature, output limit and prices come from
 backend/config/chat.toml. The thresholds the facts are computed against, and the fixed
 queries run per reasoning kind, come from backend/config/reasoning.toml. The API key is
-read from OPENAI_API_KEY in the repo-root
+read from the environment variable chat.toml names, in the repo-root
 .env (see .env.example) and is never logged, printed or returned.
 
 Usage:
@@ -225,6 +225,10 @@ class ChatConfig:
     source_id: str
     timeout_seconds: float = 60.0
     max_retries: int = 3
+    base_url: str = ""
+    api_key_env: str = "OPENAI_API_KEY"
+    json_mode: str = "json_object"
+    reasoning_effort: str = ""
 
 
 @dataclass(frozen=True)
@@ -285,6 +289,10 @@ def load_config(config_path: Path = DEFAULT_CONFIG) -> ChatConfig:
         source_id=str(section["source_id"]).strip(),
         timeout_seconds=float(section.get("timeout_seconds", 60.0)),
         max_retries=int(section.get("max_retries", 3)),
+        base_url=str(section.get("base_url", "")).strip(),
+        api_key_env=str(section.get("api_key_env", "OPENAI_API_KEY")).strip(),
+        json_mode=str(section.get("json_mode", "json_object")).strip(),
+        reasoning_effort=str(section.get("reasoning_effort", "")).strip(),
     )
 
     if not config.provider or not config.model or not config.source_id:
@@ -299,6 +307,14 @@ def load_config(config_path: Path = DEFAULT_CONFIG) -> ChatConfig:
         raise ValueError(f"{config_path}: prices must not be negative")
     if config.timeout_seconds <= 0 or config.max_retries < 0:
         raise ValueError(f"{config_path}: timeout and retries must be positive")
+    # Only the gateway needs a base URL: the default provider's URL is the SDK's own. A
+    # config that names another provider is not required to carry one.
+    if config.provider == "gateway" and not config.base_url:
+        raise ValueError(
+            f"{config_path}: base_url is required when provider is gateway"
+        )
+    if config.json_mode not in {"json_object", "text"}:
+        raise ValueError(f"{config_path}: json_mode must be json_object or text")
 
     return config
 
