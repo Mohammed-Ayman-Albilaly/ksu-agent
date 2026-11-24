@@ -159,7 +159,7 @@ needs editing means behaviour changed, and that is the moment to stop and look.
 
 | Risk | Handling |
 | :--- | :--- |
-| The gateway key is DevAI's app credential, not a project key | Request a project key before the colleague depends on it |
+| One key governs both chat and retrieval | Accepted: the project holds its own gateway key, independent of DevAI, so a DevAI update cannot revoke it |
 | `json_object` returns a reply that is not the schema | `parse_model_answer` already rejects it; the fallback answer runs |
 | `local-embedding-model` ignores `dimensions` | The response length is validated at line 278 |
 | The embedding tokenizer is unavailable | `cl100k_base` counts approximately; `max_input_tokens` is set to 8192 against a 32,768 limit |
