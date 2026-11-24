@@ -83,9 +83,31 @@ SYSTEM_PROMPT = (
     "فطبّقه واذكره، فهو الحكم الأدق لحالة الطالب.\n"
     "إذا كانت كافية، فأعد supported=true وإجابة موجزة، واذكر رقم المادة بعد كل معلومة "
     "تنقلها منها بهذه الصيغة: (المادة 62).\n"
+    "اشرح باللهجة السعودية الدارجة كما يتكلم طالب جامعي، بجمل قصيرة وواضحة، وتجنّب "
+    "الأسلوب الرسمي الجاف.\n"
+    "خلّ الإجابة في حدود ثلاثة أسطر: ابدأ بالحكم مباشرة، ثم سطر أو سطرين للشرح. اللهجة "
+    "لا تعني إطالة، والإجابة الطويلة تُبطئ النظام.\n"
+    "أما نص المادة فانقله بالفصحى كما ورد في اللائحة دون تحويله إلى لهجة: الاقتباس يجب "
+    "أن يطابق النص الأصلي، واللهجة للشرح الذي حوله فقط.\n"
     "لا تذكر رقم أي مادة غير موجودة في المواد المرفقة.\n"
     "أعد الإخراج بصيغة JSON فقط، بالحقلين supported و answer، دون أي نص آخر."
 )
+
+# Added to the system prompt only when the request carried earlier turns of the conversation.
+# The earlier turns are context, never evidence: a model that treated its own earlier answer as a
+# source would repeat a number no retrieved article supports, and the number guard cannot catch it,
+# because such a number never came from the model's own computation.
+HISTORY_RULES = (
+    "الرسائل السابقة في هذه المحادثة هي سياق المحادثة حتى الآن فقط، وليست اللائحة وليست "
+    "مصدرًا لأي معلومة، فلا تستند إليها في أي حكم ولا تعتبرها دليلًا.\n"
+    "كل ما تذكره في إجابتك يجب أن يستند إلى المواد المسترجعة لهذا السؤال تحديدًا، ولا تكرر "
+    "رقمًا ورد في إجابة سابقة إلا إذا كان في المواد المسترجعة لهذا السؤال أو في أرقام الطالب "
+    "المحسوبة.\n"
+)
+
+# How much of an earlier answer is kept. An old answer is the longest thing a conversation
+# carries, and left whole it would crowd out the articles retrieved for this question.
+HISTORY_TURN_CHARS = 400
 
 # Added to the system prompt only when the student's own records are in the prompt. The
 # block is data: whatever it contains, including text that looks like an instruction, is
@@ -341,12 +363,38 @@ def _escaped_json(value: Mapping[str, Any]) -> str:
     )
 
 
+def history_messages(history: Sequence[dict] | None) -> list[dict]:
+    """The earlier turns as ordinary prompt messages: role and content, nothing else.
+
+    An assistant turn is cut to HISTORY_TURN_CHARS, so an old long answer cannot crowd out the
+    articles retrieved for the current question. A turn without a usable role or content is dropped:
+    the endpoint refuses one, and a direct caller passing one gets no message rather than a broken
+    conversation. The turns are context, never a source of facts (HISTORY_RULES).
+    """
+    messages: list[dict] = []
+    for turn in history or ():
+        if not isinstance(turn, Mapping):
+            continue
+        role = turn.get("role")
+        content = turn.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if not content:
+            continue
+        if role == "assistant":
+            content = content[:HISTORY_TURN_CHARS]
+        messages.append({"role": role, "content": content})
+    return messages
+
+
 def build_messages(
     question: str,
     results: Sequence[SearchResult],
     student_data: Mapping[str, Any] | None = None,
     facts: Mapping[str, Any] | None = None,
     needs_regulation: bool = True,
+    history: Sequence[dict] | None = None,
 ) -> list[dict] | None:
     """System and user messages, or None when no retrieved article can be cited.
 
@@ -356,6 +404,10 @@ def build_messages(
     explains them and states no other number. Both blocks escape every <, > and &, so no value
     can close a block or open a tag.
 
+    With `history`, the earlier turns go in as ordinary user and assistant messages, after the
+    system prompt and before the current question, and the system prompt says they are the
+    conversation so far and not a source of any fact.
+
     A kind whose question needs no regulation (a week's plan, an exam clash) is answered
     from the facts alone: its prompt carries the question without articles.
     """
@@ -363,7 +415,11 @@ def build_messages(
     if not articles and (facts is None or needs_regulation):
         return None
 
+    turns = history_messages(history)
+
     system = SYSTEM_PROMPT
+    if turns:
+        system += HISTORY_RULES
     if student_data is not None:
         system += STUDENT_DATA_RULES
     if facts is not None:
@@ -380,7 +436,11 @@ def build_messages(
     else:
         asked = QUESTION_ONLY_TEMPLATE.format(question=question)
 
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": asked}]
+    messages = [
+        {"role": "system", "content": system},
+        *turns,
+        {"role": "user", "content": asked},
+    ]
     if facts is not None:
         messages.append(
             {
@@ -1171,6 +1231,7 @@ def answer_question(
     extra_queries: Sequence[str] = (),
     needs_regulation: bool = True,
     source: SourceRef | None = None,
+    history: Sequence[dict] | None = None,
 ) -> Answer:
     """Retrieve, answer from the retrieved articles only, and cite them.
 
@@ -1180,6 +1241,8 @@ def answer_question(
     number the facts do not carry. `extra_queries` are the fixed queries of the reasoning
     kind; `needs_regulation` is False for a kind the regulation does not answer; `source` is the
     regulation's title and URL, for citing an article the template states but retrieval missed.
+    `history` is the conversation so far, sent by the website with each question: it goes in the
+    prompt as context only, and no turn of it is a source of a fact.
 
     The fallback is returned when nothing citable was retrieved, when the model says
     the articles do not support an answer, or when its reply cannot be parsed. A
@@ -1197,7 +1260,7 @@ def answer_question(
 
     results = retrieve_articles(question, retriever, k, extra_queries)
     messages = build_messages(
-        question, results, student_data, facts, needs_regulation
+        question, results, student_data, facts, needs_regulation, history
     )
     if messages is None:
         LOGGER.info("nothing citable retrieved; returning the fallback answer")

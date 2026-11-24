@@ -77,7 +77,21 @@ The response gains a `type` field; nothing else about Phase 1 changes.
   `"answer"`. A client that does not know `reason` shows its generic error for that
   message; it never treats `tools` as data and never posts `/chat/with-data`.
 
-The request is unchanged: `{ message, session_id }`, with the same 401 and 422 codes.
+The request is `{ message, session_id, history }`, with the same 401 and 422 codes.
+`history` is optional and carries the conversation so far:
+
+```json
+{ "message": "...", "session_id": "...", "history": [ { "role": "user", "content": "..." }, { "role": "assistant", "content": "..." } ] }
+```
+
+The website holds the conversation and sends the last six turns (three exchanges) with
+every question; the server keeps none of it — no session, no history file, and no log line
+carrying its text, only the number of turns. `role` is `user` or `assistant`, and `content`
+is at most 1000 characters like the message. The turns are context for this answer, never a
+source of a fact: every claim still rests on the articles retrieved for the current question,
+so a number from an earlier answer is not repeated unless this question's articles or the
+student's computed facts carry it. A history of more than six turns, a role other than `user`
+or `assistant`, or a blank or too-long content is `history_invalid`.
 
 A 503 answers a failure of the answer service itself: a missing index, a missing API key,
 or a model call that fails. Only the exception's type is logged, never its message, so a
@@ -159,6 +173,7 @@ Rules:
 | :--- | :--- |
 | `message_empty` | The message is absent, empty or whitespace only. |
 | `message_too_long` | The message is over 1000 characters. |
+| `history_invalid` | `history` holds more than six turns, a role other than `user` or `assistant`, or a blank or over-1000-character content. |
 | `route_invalid` | `route_token` is absent, or does not bind this question to this student: a wrong signature, an expired token, another student's token, or another question's. |
 | `data_missing` | `data` is absent, empty, or lacks a tool the token names. |
 | `data_too_large` | The whole request body is over 20 KB. |

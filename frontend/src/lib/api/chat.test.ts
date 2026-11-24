@@ -95,6 +95,86 @@ describe("a reasoning reply", () => {
   });
 });
 
+describe("sending the conversation so far", () => {
+  const HISTORY = [
+    { role: "user" as const, content: "كم الحد الأدنى للمعدل؟" },
+    { role: "assistant" as const, content: "الحد الأدنى 2,75 من 5,00 (المادة 62)." },
+  ];
+
+  it("posts the earlier turns with the question, and parses the reply as before", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CHAT_MODE", "api");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example");
+    vi.resetModules();
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          type: "answer",
+          answer: "جواب",
+          citations: [{ title: "لائحة", article: 62, url: "https://example" }],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { sendMessage } = await import("@/lib/api/chat");
+
+    const result = await sendMessage({
+      message: "وهل تنص على ذلك؟",
+      sessionId: "s-1",
+      history: HISTORY,
+    });
+
+    // The reply means exactly what it meant before history was sent.
+    expect(result).toEqual({
+      ok: true,
+      kind: "answer",
+      answer: "جواب",
+      citations: [{ title: "لائحة", article: "62", url: "https://example" }],
+      basis: "regulation",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("https://api.example/chat");
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: "وهل تنص على ذلك؟",
+      session_id: "s-1",
+      history: HISTORY,
+    });
+  });
+
+  it("sends no turns when a caller passes none", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CHAT_MODE", "api");
+    vi.resetModules();
+
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ type: "tool", tool: "get_gpa" }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { sendMessage } = await import("@/lib/api/chat");
+
+    expect(await sendMessage({ message: "ما معدلي؟", sessionId: "s-1" })).toEqual({
+      ok: true,
+      kind: "tool",
+      tool: "get_gpa",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: "ما معدلي؟",
+      session_id: "s-1",
+      history: [],
+    });
+  });
+});
+
 describe("sending the approved values", () => {
   it("posts the data map to /chat/with-data", async () => {
     vi.stubEnv("NEXT_PUBLIC_CHAT_MODE", "api");

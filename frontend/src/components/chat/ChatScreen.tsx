@@ -9,7 +9,12 @@ import { Composer, MAX_MESSAGE_LENGTH } from "@/components/chat/Composer";
 import { ConsentCard } from "@/components/chat/ConsentCard";
 import { EmptyState } from "@/components/chat/EmptyState";
 import { MessageList } from "@/components/chat/MessageList";
-import { sendMessage, sendWithData } from "@/lib/api/chat";
+import {
+  MAX_HISTORY_TURNS,
+  sendMessage,
+  sendWithData,
+  type ChatHistoryTurn,
+} from "@/lib/api/chat";
 import {
   MAX_STORED_MESSAGES,
   readChat,
@@ -23,6 +28,20 @@ import {
   personalAnswer,
   toolErrorText,
 } from "@/lib/personalAnswers";
+
+/**
+ * The turns sent with a question: the last six of the conversation, user and assistant only.
+ *
+ * A turn with no text is the pending placeholder or a failed answer, so it carries nothing. A
+ * personal answer was built in the browser from values the server must never see (ADR 0001, rules 2
+ * and 4), so it stays on the device with the consent card it came from.
+ */
+export function historyFrom(messages: ChatMessage[]): ChatHistoryTurn[] {
+  return messages
+    .filter((message) => message.personal !== true && message.text.trim() !== "")
+    .map(({ role, text }) => ({ role, content: text }))
+    .slice(-MAX_HISTORY_TURNS);
+}
 
 function createId(): string {
   try {
@@ -144,7 +163,11 @@ export function ChatScreen() {
   );
 
   const run = useCallback(
-    async (question: string, userMessageId: string) => {
+    async (
+      question: string,
+      userMessageId: string,
+      history: ChatHistoryTurn[],
+    ) => {
       const requestId = requestRef.current + 1;
       requestRef.current = requestId;
 
@@ -152,9 +175,11 @@ export function ChatScreen() {
       abortRef.current = controller;
       setPending(true);
 
+      // The earlier turns go with the question: the server keeps no conversation of its own.
       const result = await sendMessage({
         message: question,
         sessionId,
+        history,
         signal: controller.signal,
       });
 
@@ -255,9 +280,10 @@ export function ChatScreen() {
       });
       setText("");
       textareaRef.current?.focus();
-      void run(trimmed, userMessageId);
+      // Built before this question joins the list: the conversation so far, not the question itself.
+      void run(trimmed, userMessageId, historyFrom(messages));
     },
-    [appendMessage, run],
+    [appendMessage, messages, run],
   );
 
   const stop = useCallback(() => {
@@ -283,7 +309,9 @@ export function ChatScreen() {
           setMessages((current) =>
             current.filter((message) => message.id !== messageId),
           );
-          void run(candidate.text, candidate.id);
+          // Only the turns before the question being retried travel with it again.
+          const earlier = historyFrom(messages.slice(0, cursor));
+          void run(candidate.text, candidate.id, earlier);
           return;
         }
       }
@@ -413,7 +441,6 @@ export function ChatScreen() {
         messages={messages}
         pending={pending}
         onRetry={retry}
-        onStop={stop}
         emptyState={
           <EmptyState firstName={firstName} onSelect={send} disabled={pending} />
         }
@@ -433,6 +460,7 @@ export function ChatScreen() {
         value={text}
         onChange={setText}
         onSend={() => send(text)}
+        onStop={stop}
         pending={pending}
         textareaRef={textareaRef}
       />

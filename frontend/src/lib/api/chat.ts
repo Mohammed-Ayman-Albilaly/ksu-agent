@@ -13,6 +13,15 @@ export type ChatErrorKind =
 /** What an answer rests on: the regulation, or the student's own numbers alone. */
 export type AnswerBasis = "regulation" | "student_data";
 
+/** One earlier turn of the conversation, in the shape the backend accepts. */
+export type ChatHistoryTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+/** How many earlier turns travel with a question: the last three exchanges. */
+export const MAX_HISTORY_TURNS = 6;
+
 export type SendMessageResult =
   | {
       ok: true;
@@ -34,6 +43,11 @@ export type SendMessageResult =
 export type SendMessageInput = {
   message: string;
   sessionId: string;
+  /**
+   * The conversation so far: the last few turns, held here and sent with every question.
+   * The backend keeps none of it (ADR 0001), so this is the only copy.
+   */
+  history?: ChatHistoryTurn[];
   signal?: AbortSignal;
 };
 
@@ -253,14 +267,15 @@ async function post(
 export async function sendMessage({
   message,
   sessionId,
+  history = [],
   signal,
 }: SendMessageInput): Promise<SendMessageResult> {
   if (MODE === "mock") {
     const { mockSendMessage } = await import("./chatMock");
-    return mockSendMessage({ message, sessionId, signal });
+    return mockSendMessage({ message, sessionId, history, signal });
   }
 
-  return post("/chat", { message, session_id: sessionId }, signal);
+  return post("/chat", { message, session_id: sessionId, history }, signal);
 }
 
 /**
