@@ -376,11 +376,13 @@ git commit -m "feat: one gateway seam that names the provider in config"
 
 **Files:**
 - Modify: `backend/scripts/answer.py` (`ANSWER_FORMAT`, `ask_model`, `make_client`)
+- Modify: `backend/app/intent.py` (`_asked_route`)
 - Modify: `backend/tests/test_answer.py` (add one test; edit no existing one)
+- Modify: `backend/tests/test_intent.py` (add one test; edit no existing one)
 
 **Interfaces:**
 - Consumes: `gateway.chat_kwargs(config) -> dict`, `gateway.make_chat_client(config)`, `answer.ChatConfig.base_url`, `.api_key_env`, `.json_mode`, `.reasoning_effort`
-- Produces: `answer.ask_model(config, client, messages)` unchanged in name and signature
+- Produces: `answer.ask_model(config, client, messages)` unchanged in name and signature; `intent.classify(message, *, client, config)` unchanged
 
 - [ ] **Step 1: Write the failing test**
 
@@ -406,9 +408,21 @@ def test_the_answer_model_is_asked_not_to_think():
     assert client.calls[0]["extra_body"] == {"reasoning_effort": "none"}
 ```
 
+The classifier is a chat call too, so it must not think either:
+
+```python
+def test_the_classifier_is_asked_not_to_think():
+    """Routing is one short call, and thinking would make every question pay for it."""
+    client = FakeChatClient(content=json.dumps({"route": "regulation"}))
+
+    classify(QUESTION, client=client, config=CONFIG)
+
+    assert client.calls[0]["extra_body"] == {"reasoning_effort": "none"}
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `venv\Scripts\python.exe -m pytest backend/tests/test_answer.py -k "json_object or not_to_think" -v`
+Run: `venv\Scripts\python.exe -m pytest backend/tests/test_answer.py backend/tests/test_intent.py -k "json_object or not_to_think" -v`
 Expected: FAIL — `response_format` is still the schema, and `extra_body` is absent
 
 - [ ] **Step 3: Change the two call sites**
@@ -455,9 +469,30 @@ def make_client(config: ChatConfig):
 
 with `from gateway import api_key` added to the imports and `import gateway` beside it.
 
+In `backend/app/intent.py`, `_asked_route` keeps its own `temperature`, `max_tokens`
+and `timeout` and gains the JSON mode and the thinking mode:
+
+```python
+    response = client.chat.completions.create(
+        model=config.model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": message},
+        ],
+        # Not config.temperature: routing must be the same for the same question.
+        temperature=0.0,
+        max_tokens=INTENT_MAX_TOKENS,
+        timeout=INTENT_TIMEOUT_SECONDS,
+        **gateway.chat_kwargs(config),
+    )
+```
+
+`INTENT_FORMAT` is then unused and is deleted, with `import gateway` added beside
+the existing imports.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `venv\Scripts\python.exe -m pytest backend/tests/test_answer.py -v`
+Run: `venv\Scripts\python.exe -m pytest backend/tests/test_answer.py backend/tests/test_intent.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Run the whole suite and the answer eval**
@@ -471,7 +506,7 @@ Expected: PASS, and the eval score no lower than the baseline recorded in Task 4
 Add the Task 2 entry with the prompt sent to the sub-agent, then:
 
 ```bash
-git add backend/scripts/answer.py backend/tests/test_answer.py prompt-log.md
+git add backend/scripts/answer.py backend/app/intent.py backend/tests/test_answer.py backend/tests/test_intent.py prompt-log.md
 git commit -m "feat: ask the gateway for a json object and no thinking"
 ```
 
