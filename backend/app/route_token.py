@@ -182,7 +182,22 @@ def _b64encode(value: bytes) -> str:
 
 
 def _b64decode(segment: str) -> bytes:
+    """Decode one base64url segment, refusing an encoding that is not canonical.
+
+    Python's decoder ignores the padding bits, so "AA", "AB" and "AP" all decode to
+    b"\\x00": a token whose last character was changed could still verify, and it did
+    for about one key in four. Re-encoding and comparing refuses that, so a changed
+    character is refused every time and not one run in four.
+    """
     if not isinstance(segment, str):
         raise TypeError("not text")
 
-    return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+    try:
+        value = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+    except (ValueError, TypeError):
+        raise RouteTokenError() from None
+
+    if _b64encode(value) != segment.rstrip("="):
+        raise RouteTokenError()
+
+    return value

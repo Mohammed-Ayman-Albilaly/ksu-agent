@@ -165,6 +165,18 @@ def test_a_changed_payload_does_not_verify():
         )
 
 
+def test_a_non_canonical_base64_segment_is_rejected():
+    """'AB' decodes to the same byte as 'AA', so only a re-encode check catches it.
+
+    Python's decoder ignores the padding bits, so a token whose last character was
+    changed verified for about one key in four and the tamper tests passed by luck.
+    """
+    assert route_token._b64decode("AA") == b"\x00"
+
+    with pytest.raises(route_token.RouteTokenError):
+        route_token._b64decode("AB")
+
+
 def test_a_token_from_another_student_is_rejected():
     with pytest.raises(route_token.RouteTokenError):
         route_token.verify(
