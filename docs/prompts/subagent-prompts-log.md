@@ -1,8 +1,12 @@
-# Prompt log
+# Sub-agent prompt log
 
 The prompt sent to each sub-agent, per task. Newest task first. Nothing is
 paraphrased: an entry is the prompt as sent, followed by what came back that the
 plan did not anticipate.
+
+`docs/prompts/prompts-log.md` records the prompts sent to DevAI itself, which is a
+different thing: this file records only delegation to a sub-agent, so a task's work
+can be traced back to the brief it was given.
 
 ## Task 3, Steps 1–4 — ai-ml-engineer — 2026-11-24
 
