@@ -413,7 +413,6 @@ export function ChatScreen() {
         messages={messages}
         pending={pending}
         onRetry={retry}
-        onStop={stop}
         emptyState={
           <EmptyState firstName={firstName} onSelect={send} disabled={pending} />
         }
@@ -433,6 +432,7 @@ export function ChatScreen() {
         value={text}
         onChange={setText}
         onSend={() => send(text)}
+        onStop={stop}
         pending={pending}
         textareaRef={textareaRef}
       />

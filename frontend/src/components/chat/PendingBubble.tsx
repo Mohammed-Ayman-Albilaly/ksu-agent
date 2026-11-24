@@ -1,13 +1,13 @@
 "use client";
 
 import { useLanguage } from "@/components/LanguageProvider";
-import { BrandMark, StopIcon } from "@/components/icons";
+import { BrandMark } from "@/components/icons";
 
-type PendingBubbleProps = {
-  onStop: () => void;
-};
-
-export function PendingBubble({ onStop }: PendingBubbleProps) {
+/**
+ * The waiting bubble. It carries no control of its own: stopping a reply is the
+ * composer's job, where the send button stands, so there is one place to look.
+ */
+export function PendingBubble() {
   const { t } = useLanguage();
 
   return (
@@ -22,15 +22,6 @@ export function PendingBubble({ onStop }: PendingBubbleProps) {
         </span>
 
         <p className="text-sm text-muted">{t.chat.searching}</p>
-
-        <button
-          type="button"
-          onClick={onStop}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-surface"
-        >
-          <StopIcon className="h-3.5 w-3.5" />
-          {t.chat.stop}
-        </button>
       </div>
     </div>
   );

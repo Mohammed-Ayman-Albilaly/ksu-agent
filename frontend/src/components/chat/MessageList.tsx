@@ -11,7 +11,6 @@ type MessageListProps = {
   messages: ChatMessage[];
   pending: boolean;
   onRetry: (messageId: string) => void;
-  onStop: () => void;
   emptyState: ReactNode;
   /** The consent card for the newest question, rendered after the messages. */
   consent?: ReactNode;
@@ -23,7 +22,6 @@ export function MessageList({
   messages,
   pending,
   onRetry,
-  onStop,
   emptyState,
   consent,
 }: MessageListProps) {
@@ -105,7 +103,7 @@ export function MessageList({
 
             {consent}
 
-            {pending ? <PendingBubble onStop={onStop} /> : null}
+            {pending ? <PendingBubble /> : null}
           </div>
         )}
       </div>

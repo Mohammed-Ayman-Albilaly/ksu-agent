@@ -13,6 +13,10 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // jsdom gives a document an opaque origin (about:blank) unless a URL is set, and an
+    // opaque origin has no localStorage: every test that touches web storage failed on
+    // window.localStorage.clear() before this was named here.
+    environmentOptions: { jsdom: { url: "http://localhost:3000" } },
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     restoreMocks: true,

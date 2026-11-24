@@ -6,7 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { useLanguage } from "@/components/LanguageProvider";
-import { SendIcon } from "@/components/icons";
+import { SendIcon, StopIcon } from "@/components/icons";
 
 export const MAX_MESSAGE_LENGTH = 1000;
 
@@ -17,6 +17,7 @@ type ComposerProps = {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
+  onStop: () => void;
   pending: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
 };
@@ -25,6 +26,7 @@ export function Composer({
   value,
   onChange,
   onSend,
+  onStop,
   pending,
   textareaRef,
 }: ComposerProps) {
@@ -97,14 +99,28 @@ export function Composer({
             className="max-h-36 w-full resize-none bg-transparent py-1.5 text-sm leading-6 text-ink placeholder:text-muted/60"
           />
 
-          <button
-            type="submit"
-            disabled={!canSend}
-            aria-label={t.chat.send}
-            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-deep text-white transition-colors hover:bg-teal-dark disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <SendIcon className="h-4 w-4" />
-          </button>
+          {/* The stop button takes the send button's place while a reply is pending, the way
+              a chat platform does it: one control, in one place, and no second target to
+              hunt for while the answer is arriving. */}
+          {pending ? (
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label={t.chat.stop}
+              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-navy transition-colors hover:bg-surface"
+            >
+              <StopIcon className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!canSend}
+              aria-label={t.chat.send}
+              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-deep text-white transition-colors hover:bg-teal-dark disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <SendIcon className="h-4 w-4" />
+            </button>
+          )}
         </form>
 
         <div className="mt-2 flex items-center justify-between gap-3">
