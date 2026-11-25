@@ -1,0 +1,89 @@
+# Study plan sources for KSU Agent ingestion.
+#
+# Every URL the study plan pipeline downloads lives here, never in a script.
+# Adding or replacing a program plan is an edit to this file, followed by
+# `python backend/scripts/fetch_plans.py --plan <id>` and
+# `python backend/scripts/parse_plan.py --plan <id>`.
+#
+#   id          stable identifier; also the processed file name (<id>.json)
+#   title       human-readable name, quoted in answers
+#   program_url the page a student would open; carried into every citation
+#   source_url  the file (pdf) or JSON:API URL (html_table) actually downloaded
+#   form        "pdf"        — a PDF parsed with pymupdf
+#               "html_table" — a JSON:API node whose data.attributes.body.value
+#                              holds the HTML tables
+#   language    "en" or "ar", the language of the course titles in the source
+#   stale_risk  optional, true when the source may be an older edition than the
+#               plan currently in force; the loader still returns it, but an answer
+#               built on it must say so until the plan is checked
+#
+# Downloaded files land in data/raw/plans/<id>.<ext> with a <id>.meta.json
+# recording the URL, download date and SHA-256. Both directories are git-ignored.
+
+[[plan]]
+id = "swe"
+title = "Software Engineering (SWE) — BSc study plan, 2023"
+program_url = "https://ccis.ksu.edu.sa/ar/se/se-bsc-program"
+source_url = "https://ccis.ksu.edu.sa/sites/ccis.ksu.edu.sa/files/users/user805/SWE%20BSc%20Study%20Plan-2023.pdf"
+form = "pdf"
+language = "en"
+
+[[plan]]
+id = "it"
+title = "Information Technology (IT) — BSc study plan, 2026"
+program_url = "https://ccis.ksu.edu.sa/ar/it/bsc-program"
+source_url = "https://ccis.ksu.edu.sa/sites/ccis.ksu.edu.sa/files/users/user410/BSIT-Plan-English%202026.pdf"
+form = "pdf"
+language = "en"
+
+[[plan]]
+id = "cs"
+title = "Computer Science (CS) — BSc study plan, student handbook"
+program_url = "https://cs.ksu.edu.sa/ar/cs/bsc-program"
+source_url = "https://ccis.ksu.edu.sa/sites/ccis.ksu.edu.sa/files/users/user984/guides/CS_Student_Handbook_v3_Final.pdf"
+form = "pdf"
+language = "en"
+
+[[plan]]
+id = "ce"
+title = "هندسة الحاسب (CE) — خطة البرنامج"
+program_url = "https://ccis.ksu.edu.sa/ar/ce/new-bsc-program"
+source_url = "https://ccis.ksu.edu.sa/ar/jsonapi/node/page/5c9f148e-2721-4512-9702-fcf63fe9f08c?fields[node--page]=body"
+form = "html_table"
+language = "ar"
+
+# The IS table on the CCIS site looks older than the 2024-2026 PDFs the other
+# departments publish: Arabic-Indic course codes (١١١عال, ١٤٠تقن), 8 levels plus
+# summer training, while IT publishes a 2026 PDF. It is ingested so the question
+# can be answered from a table at all, but stale_risk = true means an answer built
+# on it must say the plan has not been checked against the current edition.
+# Do not remove the flag until someone compares it with the plan in force and
+# records that check in docs/superpowers/specs/2026-11-24-study-plans-design.md §6.
+[[plan]]
+id = "is"
+title = "نظم المعلومات (IS) — خطة البرنامج (لم تُراجع)"
+program_url = "https://ccis.ksu.edu.sa/ar/node/1202"
+source_url = "https://ccis.ksu.edu.sa/ar/jsonapi/node/page/87b91afb-2245-4884-b1b0-d83e0b247177?fields[node--page]=body"
+form = "html_table"
+language = "ar"
+stale_risk = true
+
+# --- what does not parse today, and why -------------------------------------
+#
+# Recorded here rather than discovered later. parse_plan.py refuses each of these
+# with a named error and writes no plan, so no answer can rest on a table that was
+# silently wrong. Re-enable an entry only when its source changes shape or the
+# parser learns that shape.
+#
+# cs  — the handbook groups two levels into one table ("First Common Year
+#       (Levels 1-2)"), so a row cannot be attributed to a level, and the tables
+#       carry no "Total N CH" to check a dropped row against. Its rows also put
+#       credits last and carry a "Type" column and placeholder codes (CSC xxx).
+# it  — the four-year plan prints Level One and Level Two side by side in one
+#       table, so text extraction interleaves the two panels and a line-based
+#       parser cannot tell which panel a course belongs to. Splitting it needs word
+#       coordinates, not text lines.
+# is  — refused on its own arithmetic, which is the stale_risk flag proving
+#       itself: level 6 parses to 14 CH but its own <tfoot> says 17, and the table
+#       has an empty row where the missing course should be. Level 7 has the same
+#       defect. The total check was not relaxed to let it through.

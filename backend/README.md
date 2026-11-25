@@ -67,3 +67,26 @@ session_id}` in, `{answer, citations: [{title, article, url}]}` out. A message t
 empty (or blank) or over 1000 characters is a 422; a model or index failure is a 503,
 so "the service is down" is never reported as "the regulation does not say". `article`
 is `null` for the annex chunk, which has no article number.
+
+## Study plans
+
+A study plan is a table — course code, title, credit hours, prerequisite — not prose retention,
+so it is not chunked and embedded. SD-19 puts dates and prerequisites in tables, and this
+pipeline follows it. Design: [`../docs/superpowers/specs/2026-11-24-study-plans-design.md`](../docs/superpowers/specs/2026-11-24-study-plans-design.md).
+
+```bash
+python backend/scripts/fetch_plans.py                 # download every source in config/plans.toml
+python backend/scripts/parse_plan.py --plan swe        # write data/processed/plans/swe.json
+python backend/scripts/plans.py --program swe --level 1
+python backend/scripts/plans.py --program swe --course "MATH 101"
+```
+
+Every URL is in [`config/plans.toml`](config/plans.toml), never in a script. Two parsers exist:
+a PDF one using `pymupdf`, and an HTML-table one reading the CCIS JSON:API `body.value`.
+
+The parser refuses a source rather than writing a wrong plan, and `config/plans.toml` records
+why each refused source is refused. Today SWE (9 levels, 47 courses, 137 CH) and CE (10 levels,
+53 courses, 160 CH) parse, and each reconciles against the totals the source itself prints.
+CS, IT and IS do not: CS groups two levels into one table, IT prints two levels side by side in
+one table, and IS fails its own arithmetic — level 6 parses to 14 CH where its footer says 17,
+which is the `stale_risk` flag proving itself.
