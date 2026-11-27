@@ -91,6 +91,33 @@ summer training, while IT publishes a 2026 PDF. It sits on the same site as newe
 disagree. It must be checked against the current plan before it becomes a source, and the check recorded in
 the table's metadata rather than assumed.
 
+## 6b. Decisions of 2026-11-24, after the plans were read
+
+These replace the naive "sum equals the programme total" check in §3, and they are the rules the
+ingestion must enforce.
+
+1. **Levels come from the regular plan (الخطة النظامية), not the suggested one (الخطة المقترحة).** The
+   suggested plan only reorders courses across terms; the regular plan is the one a student is held to.
+2. **No elective slot rows.** An elective is not a course, so it is not a row. Elective hours live in
+   `elective-pools.csv` as `pool_credits`, and the per-program table holds courses only.
+3. **The check is therefore:** `sum(credits) == total - 32 - pool_credits`, where 32 is the common first
+   year and `pool_credits` is the programme's elective pool. The `التخصص` row of each distribution table is
+   the figure that must match: **SWE 83, CS 80, IS 86, CE 107, IT 85**.
+4. **The common first year is out of scope.** It is one shared block, not a per-program set of rows, and it
+   would otherwise be counted seven times.
+5. **A prerequisite that names a first-year course is expected, not a dangling reference.** `ريض 101`,
+   `تقن 101`, `انجل 110` and `احص 101` will not appear in any program table. The referential check must
+   allow them explicitly rather than fail on them.
+6. **CE has 10 levels; every other programme has 8. There is no summer level.**
+7. **A co-requisite (مرافق) is not a prerequisite.** Both courses are taken in the same term, and the
+   relation lives in `course-details.csv`, never in the `prerequisites` column.
+8. **Field training (479) is taken once its hour condition is met**, often in the last term or in summer. Its
+   `level` is a suggestion and must not be read as a constraint.
+9. **CS electives are 9 hours from inside the department plus 3 from outside.** Both live in
+   `elective-pools.csv` as `pool_credits`, not as rows.
+10. **These plans apply to all current students.** No cohort or year-of-entry filtering, so a plan is not dated
+    per student and the answer never asks when the student started.
+
 ## 7. Risks
 
 | Risk | Handling |
